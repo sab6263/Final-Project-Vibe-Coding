@@ -26,55 +26,135 @@
 
         <!-- Main Content -->
         <main class="main-content">
-            <header class="page-header">
-                <h1>Projects</h1>
-                <div class="controls-group">
-                    <div class="search-wrapper">
-                        <svg class="search-icon" width="20" height="20" viewBox="0 0 24 24" fill="none"
-                            stroke="currentColor" stroke-width="2">
-                            <circle cx="11" cy="11" r="8"></circle>
-                            <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
-                        </svg>
-                        <input type="text" id="searchInput" placeholder="Search projects...">
-                    </div>
+            <!-- VIEW: Projects Overview -->
+            <div id="projectsOverview">
+                <header class="page-header">
+                    <h1>Your projects</h1>
+                    <div class="controls-group">
+                        <div class="search-wrapper">
+                            <svg class="search-icon" width="20" height="20" viewBox="0 0 24 24" fill="none"
+                                stroke="currentColor" stroke-width="2">
+                                <circle cx="11" cy="11" r="8"></circle>
+                                <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                            </svg>
+                            <input type="text" id="searchInput" placeholder="Search projects...">
+                        </div>
 
-                    <div class="filter-wrapper">
-                        <button class="filter-btn active" data-filter="all">All projects</button>
-                        <button class="filter-btn" data-filter="active">Active</button>
-                        <button class="filter-btn" data-filter="inactive">Inactive</button>
-                    </div>
+                        <div class="filter-wrapper">
+                            <button class="filter-btn active" data-filter="all">All projects</button>
+                            <button class="filter-btn" data-filter="active">Active</button>
+                            <button class="filter-btn" data-filter="inactive">Inactive</button>
+                        </div>
 
-                    <button id="createProjectBtn" class="btn-primary">
-                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                            stroke-width="2">
-                            <line x1="12" y1="5" x2="12" y2="19"></line>
-                            <line x1="5" y1="12" x2="19" y2="12"></line>
+                        <button id="createProjectBtn" class="btn-primary">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                stroke-width="2">
+                                <line x1="12" y1="5" x2="12" y2="19"></line>
+                                <line x1="5" y1="12" x2="19" y2="12"></line>
+                            </svg>
+                            Create new project
+                        </button>
+                    </div>
+                </header>
+
+                <div id="projectsContainer" class="projects-grid">
+                    <!-- Projects will be rendered here -->
+                </div>
+
+                <!-- Empty State -->
+                <div id="emptyState" class="empty-state hidden">
+                    <div class="empty-illustration">
+                        <svg width="120" height="120" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="1" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                            <polyline points="14 2 14 8 20 8"></polyline>
+                            <line x1="12" y1="18" x2="12" y2="12"></line>
+                            <line x1="9" y1="15" x2="15" y2="15"></line>
                         </svg>
+                    </div>
+                    <h2>No projects yet</h2>
+                    <p>Create your first qualitative research project to get started.</p>
+                    <button id="createProjectBtnEmpty" class="btn-primary">
                         Create new project
                     </button>
                 </div>
-            </header>
-
-            <div id="projectsContainer" class="projects-grid">
-                <!-- Projects will be rendered here -->
             </div>
 
-            <!-- Empty State -->
-            <div id="emptyState" class="empty-state hidden">
-                <div class="empty-illustration">
-                    <svg width="120" height="120" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1"
-                        stroke-linecap="round" stroke-linejoin="round">
-                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
-                        <polyline points="14 2 14 8 20 8"></polyline>
-                        <line x1="12" y1="18" x2="12" y2="12"></line>
-                        <line x1="9" y1="15" x2="15" y2="15"></line>
-                    </svg>
+            <!-- VIEW: Project Detail -->
+            <div id="projectDetailView" class="hidden">
+                <header class="detail-header">
+                    <div class="header-left">
+                        <button id="backToProjectsBtn" class="icon-btn back-btn" title="Back to Projects">
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                stroke-width="2">
+                                <path d="M19 12H5M12 19l-7-7 7-7" />
+                            </svg>
+                        </button>
+                        <div class="title-wrapper">
+                            <h1 id="detailProjectTitle" contenteditable="true" spellcheck="false">Project Title</h1>
+                            <button class="icon-btn edit-title-btn" title="Edit Title">
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                    stroke-width="2">
+                                    <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                                    <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+                                </svg>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="header-right">
+                        <button id="projectStatusToggle" class="status-toggle-btn">
+                            Status: Active
+                        </button>
+                        <div class="divider-vertical"></div>
+                        <button id="deleteProjectDetailBtn" class="icon-btn delete-btn" title="Delete Project">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                stroke-width="2">
+                                <polyline points="3 6 5 6 21 6"></polyline>
+                                <path
+                                    d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2">
+                                </path>
+                            </svg>
+                        </button>
+                    </div>
+                </header>
+
+                <div class="detail-grid">
+                    <!-- Panel A: Guidelines -->
+                    <section class="panel">
+                        <div class="panel-header">
+                            <h2>Interview Guidelines</h2>
+                            <button id="createGuidelineBtn" class="btn-primary small">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                    stroke-width="2">
+                                    <line x1="12" y1="5" x2="12" y2="19"></line>
+                                    <line x1="5" y1="12" x2="19" y2="12"></line>
+                                </svg>
+                                New
+                            </button>
+                        </div>
+                        <div id="guidelinesList" class="list-container empty-list-placeholder">
+                            <p>No guidelines yet.</p>
+                        </div>
+                    </section>
+
+                    <!-- Panel B: Interviews -->
+                    <section class="panel">
+                        <div class="panel-header">
+                            <h2>Interviews</h2>
+                            <button id="createInterviewBtn" class="btn-primary small">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                    stroke-width="2">
+                                    <line x1="12" y1="5" x2="12" y2="19"></line>
+                                    <line x1="5" y1="12" x2="19" y2="12"></line>
+                                </svg>
+                                New
+                            </button>
+                        </div>
+                        <div id="interviewsList" class="list-container empty-list-placeholder">
+                            <p>No interviews yet.</p>
+                        </div>
+                    </section>
                 </div>
-                <h2>No projects yet</h2>
-                <p>Create your first qualitative research project to get started.</p>
-                <button id="createProjectBtnEmpty" class="btn-primary">
-                    Create new project
-                </button>
             </div>
         </main>
     </div>

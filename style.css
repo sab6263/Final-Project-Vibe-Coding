@@ -588,6 +588,207 @@ body {
     position: relative;
 }
 
+/* ... existing menu styles ... */
+
+/* Detail View Styles */
+.detail-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 2rem;
+    padding-bottom: 1rem;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+}
+
+.header-left {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+}
+
+.title-wrapper {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+#detailProjectTitle {
+    font-size: 2rem;
+    font-weight: 800;
+    color: var(--text-title);
+    border: 2px solid transparent;
+    border-radius: var(--radius-sm);
+    padding: 0 0.5rem;
+    margin-left: -0.5rem;
+    /* align correctly */
+    outline: none;
+    transition: all 0.2s;
+}
+
+#detailProjectTitle:hover {
+    border-color: rgba(0, 0, 0, 0.05);
+}
+
+#detailProjectTitle:focus {
+    border-color: var(--brand-primary);
+    background: white;
+}
+
+.edit-title-btn {
+    opacity: 0;
+    transition: opacity 0.2s;
+    color: var(--text-muted);
+}
+
+.title-wrapper:hover .edit-title-btn {
+    opacity: 1;
+}
+
+.back-btn {
+    border: 1px solid rgba(0, 0, 0, 0.1);
+    background: white;
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-body);
+}
+
+.back-btn:hover {
+    transform: translateX(-2px);
+    border-color: var(--brand-primary);
+    color: var(--brand-primary);
+}
+
+.divider-vertical {
+    width: 1px;
+    height: 24px;
+    background: rgba(0, 0, 0, 0.1);
+}
+
+/* Redesigned Status Toggle - Pill Button */
+/* Redesigned Status Toggle - Pill Button (Matches Status Badge) */
+.status-toggle-btn {
+    appearance: none;
+    -webkit-appearance: none;
+
+    /* Base Badge Styles */
+    padding: 0.35rem 1.25rem;
+    border-radius: 20px;
+    font-size: 0.75rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    backdrop-filter: blur(4px);
+    cursor: pointer;
+    transition: all 0.2s ease;
+
+    /* Default (Inactive) State */
+    background: var(--status-inactive-bg);
+    color: var(--text-muted);
+    border: 1px solid var(--border-light);
+    box-shadow: none;
+}
+
+/* Remove the old dot indicator */
+.status-toggle-btn::before {
+    display: none;
+}
+
+.status-toggle-btn:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+}
+
+.status-toggle-btn:active {
+    transform: translateY(0);
+}
+
+.status-toggle-btn.is-active {
+    background: var(--status-active-bg);
+    color: var(--status-active-text);
+    box-shadow: 0 0 10px rgba(234, 88, 12, 0.2);
+    border-color: transparent;
+}
+
+.status-toggle-btn.is-active:hover {
+    box-shadow: 0 0 15px rgba(234, 88, 12, 0.3);
+}
+
+/* Detail Content Grid - Stacked Vertically */
+.detail-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 2rem;
+    margin-top: 1rem;
+}
+
+.panel {
+    background: var(--bg-surface);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: var(--glass-border);
+    border-radius: var(--radius-lg);
+    padding: 1.5rem;
+    box-shadow: var(--shadow-card);
+    display: flex;
+    flex-direction: column;
+    min-height: 400px;
+    /* Min height for panels */
+}
+
+.panel-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1.5rem;
+    padding-bottom: 1rem;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+}
+
+.panel-header h2 {
+    font-size: 1.25rem;
+    font-weight: 700;
+    color: var(--text-title);
+}
+
+.btn-primary.small {
+    padding: 0.4rem 0.85rem;
+    font-size: 0.85rem;
+    gap: 0.4rem;
+}
+
+.list-container {
+    flex: 1;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.empty-list-placeholder {
+    align-items: center;
+    justify-content: center;
+    color: var(--text-muted);
+    font-style: italic;
+    background: rgba(0, 0, 0, 0.02);
+    border-radius: var(--radius-md);
+    border: 1px dashed rgba(0, 0, 0, 0.1);
+}
+
+/* Delete Button for Detail */
+.delete-btn {
+    color: var(--text-muted);
+    transition: all 0.2s;
+}
+
+.delete-btn:hover {
+    color: #ef4444;
+    background: #fef2f2;
+}
+
 /* Menu Container */
 .card-menu-container {
     position: relative;
