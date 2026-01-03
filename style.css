@@ -156,6 +156,7 @@ body {
     /* Subtle text gradient for fancy feel */
     background: linear-gradient(to right, var(--text-title), #475569);
     -webkit-background-clip: text;
+    background-clip: text;
     -webkit-text-fill-color: transparent;
 }
 
@@ -735,8 +736,8 @@ body {
     box-shadow: var(--shadow-card);
     display: flex;
     flex-direction: column;
-    min-height: 400px;
-    /* Min height for panels */
+    min-height: 200px;
+    /* Reduced min height */
 }
 
 .panel-header {

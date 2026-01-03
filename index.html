@@ -9,6 +9,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="editor_styles.css">
 </head>
 
 <body>
@@ -156,6 +157,63 @@
                     </section>
                 </div>
             </div>
+            <!-- VIEW: Guideline Editor -->
+            <div id="guidelineEditorView" class="hidden">
+                <header class="detail-header">
+                    <div class="header-left">
+                        <button id="backToProjectFromGuidelineBtn" class="icon-btn back-btn" title="Cancel">
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                stroke-width="2">
+                                <path d="M19 12H5M12 19l-7-7 7-7" />
+                            </svg>
+                        </button>
+                        <div class="title-wrapper">
+                            <h1 id="guidelineTitle" contenteditable="true" spellcheck="false">Untitled Guideline</h1>
+                            <button class="icon-btn edit-title-btn" title="Rename">
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                    stroke-width="2">
+                                    <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                                    <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+                                </svg>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="header-right">
+                        <button id="saveGuidelineBtn" class="btn-primary">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                stroke-width="2">
+                                <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
+                                <polyline points="17 21 17 13 7 13 7 21"></polyline>
+                                <polyline points="7 3 7 8 15 8"></polyline>
+                            </svg>
+                            Save Guideline
+                        </button>
+                    </div>
+                </header>
+
+                <div class="editor-wrapper">
+                    <div class="editor-card">
+                        <div class="editor-header-info">
+                            <p>Plan your interview structure. These topics will be available during the live interview.
+                            </p>
+                        </div>
+
+                        <div id="questionsContainer" class="questions-list">
+                            <!-- Dynamic Inputs go here -->
+                        </div>
+
+                        <button id="addQuestionBtn" class="btn-dashed">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                stroke-width="2">
+                                <circle cx="12" cy="12" r="10"></circle>
+                                <line x1="12" y1="8" x2="12" y2="16"></line>
+                                <line x1="8" y1="12" x2="16" y2="12"></line>
+                            </svg>
+                            Add Question or Topic
+                        </button>
+                    </div>
+                </div>
+            </div>
         </main>
     </div>
 
@@ -188,7 +246,7 @@
     <div id="deleteConfirmModal" class="modal-overlay hidden">
         <div class="modal-container" style="max-width: 400px;">
             <div class="modal-header">
-                <h2>Delete Project</h2>
+                <h2 id="deleteModalTitle">Delete Project</h2>
                 <button id="closeDeleteModalIcon" class="icon-btn">
                     <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <line x1="18" y1="6" x2="6" y2="18"></line>
@@ -197,7 +255,7 @@
                 </button>
             </div>
             <div class="modal-body">
-                <p>Are you sure you want to delete this project? This action cannot be undone.</p>
+                <p id="deleteModalText">Are you sure you want to delete this project? This action cannot be undone.</p>
             </div>
             <div class="modal-footer">
                 <button id="cancelDeleteBtn" class="btn-secondary">Cancel</button>
