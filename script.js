@@ -23,9 +23,36 @@ const cancelCreateBtn = document.getElementById('cancelCreateBtn');
 const confirmCreateBtn = document.getElementById('confirmCreateBtn');
 const newProjectNameInput = document.getElementById('newProjectName');
 
+// Delete Modal Elements
+const deleteModal = document.getElementById('deleteConfirmModal');
+const closeDeleteModalIcon = document.getElementById('closeDeleteModalIcon');
+const cancelDeleteBtn = document.getElementById('cancelDeleteBtn');
+const confirmDeleteBtn = document.getElementById('confirmDeleteBtn');
+
+// State for deletion
+let projectIdToDelete = null;
+
 // Initialization
 document.addEventListener('DOMContentLoaded', () => {
     render();
+
+    // Global click listener to close dropdowns
+    document.addEventListener('click', (e) => {
+        if (!e.target.closest('.card-menu-container')) {
+            document.querySelectorAll('.card-dropdown').forEach(el => el.classList.add('hidden'));
+        }
+    });
+
+    // Delete Modal Listeners
+    if (deleteModal) {
+        closeDeleteModalIcon.addEventListener('click', closeDeleteModal);
+        cancelDeleteBtn.addEventListener('click', closeDeleteModal);
+        confirmDeleteBtn.addEventListener('click', confirmDeleteAction);
+
+        deleteModal.addEventListener('click', (e) => {
+            if (e.target === deleteModal) closeDeleteModal();
+        });
+    }
 });
 
 // Event Listeners
@@ -145,7 +172,50 @@ function toggleProjectStatus(id) {
     const project = projects.find(p => p.id === id);
     if (project) {
         project.status = project.status === 'active' ? 'inactive' : 'active';
+        render(); // Re-render to update UI
+    }
+}
+
+/**
+ * Deletes a project - Opens Confirmation
+ */
+function deleteProject(id) {
+    projectIdToDelete = id;
+
+    // Hide any open menus
+    document.querySelectorAll('.card-dropdown').forEach(el => el.classList.add('hidden'));
+
+    deleteModal.classList.remove('hidden');
+}
+
+function closeDeleteModal() {
+    deleteModal.classList.add('hidden');
+    projectIdToDelete = null;
+}
+
+function confirmDeleteAction() {
+    if (projectIdToDelete) {
+        projects = projects.filter(p => p.id !== projectIdToDelete);
         render();
+        showToast('Project deleted');
+    }
+    closeDeleteModal();
+}
+
+/**
+ * Toggles the dropdown menu for a card
+ */
+function toggleCardMenu(event, id) {
+    event.stopPropagation(); // Prevent closing immediately
+
+    // Close other open menus first
+    document.querySelectorAll('.card-dropdown').forEach(el => {
+        if (el.id !== `menu-${id}`) el.classList.add('hidden');
+    });
+
+    const menu = document.getElementById(`menu-${id}`);
+    if (menu) {
+        menu.classList.toggle('hidden');
     }
 }
 
@@ -156,17 +226,10 @@ function render() {
     // 1. Check if total projects exist (for global empty state)
     if (projects.length === 0) {
         projectsContainer.classList.add('hidden');
-        // Keep controls visible but maybe we could hide them. 
-        // For now, consistent with previous step, keeping them visible is fine,
-        // but the empty state component takes precedence visually when no projects exist at all.
-
         emptyState.classList.remove('hidden');
         projectsContainer.innerHTML = '';
-
-        // If we are in empty state, creating a project should trigger the modal too (handled by event listener)
         return;
     } else {
-        // We have projects, verify if we should hide empty state
         emptyState.classList.add('hidden');
         projectsContainer.classList.remove('hidden');
     }
@@ -194,15 +257,29 @@ function render() {
                         <h3 class="project-title">${escapeHtml(project.name)}</h3>
                         <div class="project-date">Updated ${formatDate(project.updatedAt)}</div>
                     </div>
-                    <span class="status-badge ${project.status}">
-                        ${project.status}
-                    </span>
-                </div>
-                <div class="card-actions">
-                    <button class="btn-text" onclick="toggleProjectStatus('${project.id}')">
-                        ${project.status === 'active' ? 'Mark as Inactive' : 'Mark as Active'}
-                    </button>
-                    <!-- Future: <button class="btn-text">Open</button> -->
+                    <div class="header-right">
+                        <span class="status-badge ${project.status}">
+                            ${project.status}
+                        </span>
+                        <div class="card-menu-container">
+                            <button class="icon-btn menu-trigger" onclick="toggleCardMenu(event, '${project.id}')">
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <circle cx="12" cy="12" r="1"></circle>
+                                    <circle cx="12" cy="5" r="1"></circle>
+                                    <circle cx="12" cy="19" r="1"></circle>
+                                </svg>
+                            </button>
+                            <!-- Dropdown Menu -->
+                            <div id="menu-${project.id}" class="card-dropdown hidden">
+                                <button class="dropdown-item" onclick="toggleProjectStatus('${project.id}')">
+                                    ${project.status === 'active' ? 'Mark as Inactive' : 'Mark as Active'}
+                                </button>
+                                <button class="dropdown-item delete" onclick="deleteProject('${project.id}')">
+                                    Delete Project
+                                </button>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
         `).join('');
@@ -240,4 +317,6 @@ function showToast(message) {
 }
 
 // Make functions active globally for inline onclick
+window.toggleCardMenu = toggleCardMenu;
 window.toggleProjectStatus = toggleProjectStatus;
+window.deleteProject = deleteProject;

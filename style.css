@@ -346,7 +346,8 @@ body {
 }
 
 .project-card:hover {
-    transform: translateY(-2px);
+    transform: none;
+    /* No movement as requested */
     border-color: rgba(255, 255, 255, 0.9);
     box-shadow: var(--shadow-float), var(--shadow-glow);
 }
@@ -577,4 +578,98 @@ body {
         transform: translateY(0);
         opacity: 1;
     }
+}
+
+/* Header Right Side (Badge + Menu) */
+.header-right {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    position: relative;
+}
+
+/* Menu Container */
+.card-menu-container {
+    position: relative;
+    /* Ensure dropdown positions relative to this */
+}
+
+.menu-trigger {
+    background: transparent;
+    border: none;
+    color: var(--text-muted);
+    padding: 0.25rem;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.2s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.menu-trigger:hover {
+    background: rgba(0, 0, 0, 0.05);
+    color: var(--text-title);
+}
+
+/* Dropdown Menu - Glassy Popover */
+.card-dropdown {
+    position: absolute;
+    top: 100%;
+    right: 0;
+    margin-top: 0.5rem;
+    width: 180px;
+    background: var(--bg-surface);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid rgba(0, 0, 0, 0.1);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-float);
+    z-index: 50;
+    padding: 0.5rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    animation: fadeIn 0.1s ease-out;
+}
+
+.dropdown-item {
+    background: transparent;
+    border: none;
+    text-align: left;
+    padding: 0.5rem 0.75rem;
+    font-size: 0.9rem;
+    color: var(--text-body);
+    font-weight: 500;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.dropdown-item:hover {
+    background: rgba(0, 0, 0, 0.05);
+    color: var(--text-title);
+}
+
+.dropdown-item.delete {
+    color: #ef4444;
+    /* Red for delete */
+}
+
+.dropdown-item.delete:hover {
+    background: #fef2f2;
+    color: #dc2626;
+}
+
+/* Override z-indexes to ensure menu floats above */
+.card-header {
+    z-index: 20;
+    /* Ensure header is above card background for menu */
+    overflow: visible;
+    /* Allow menu to spill out */
+}
+
+/* Ensure card doesn't clip menu */
+.project-card {
+    overflow: visible;
 }
