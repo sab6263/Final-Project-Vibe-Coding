@@ -1046,35 +1046,55 @@ body.fullscreen-active .main-content {
 }
 
 .record-btn {
-    width: 48px;
-    height: 48px;
-    border-radius: 50%;
+    height: 42px;
+    padding: 0 1.25rem;
+    border-radius: 21px;
     display: flex;
     align-items: center;
-    justify-content: center;
+    gap: 0.5rem;
     border: none;
     cursor: pointer;
-    transition: all 0.2s;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    font-family: inherit;
+    font-weight: 600;
+    font-size: 0.9rem;
+    white-space: nowrap;
 }
 
 .btn-start {
-    background: var(--brand-primary);
+    background: #10b981;
+    /* Emerald 500 */
     color: white;
+    box-shadow: 0 4px 6px -1px rgba(16, 185, 129, 0.2);
 }
 
 .btn-pause {
     background: #64748b;
+    /* Slate 500 */
     color: white;
 }
 
 .btn-stop {
     background: #ef4444;
+    /* Red 500 */
     color: white;
+    box-shadow: 0 4px 6px -1px rgba(239, 68, 68, 0.2);
 }
 
-.record-btn:hover {
-    transform: scale(1.05);
+.record-btn:hover:not(:disabled) {
+    transform: translateY(-2px);
     filter: brightness(1.1);
+    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+}
+
+.record-btn:active:not(:disabled) {
+    transform: translateY(0);
+}
+
+.record-btn:disabled {
+    opacity: 0.3;
+    cursor: not-allowed;
+    filter: grayscale(0.5);
 }
 
 .transcription-feed {

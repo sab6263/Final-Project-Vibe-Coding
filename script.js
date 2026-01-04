@@ -1472,6 +1472,9 @@ function startInterview() {
     isPaused = false;
 
     startRecordingBtn.disabled = true;
+    const btnText = startRecordingBtn.querySelector('span');
+    if (btnText) btnText.textContent = 'Start Recording';
+
     pauseRecordingBtn.disabled = false;
     stopRecordingBtn.disabled = false;
     recordingStatus.textContent = 'Recording...';
@@ -1488,6 +1491,9 @@ function pauseInterview() {
     isRecording = false;
 
     startRecordingBtn.disabled = false;
+    const btnText = startRecordingBtn.querySelector('span');
+    if (btnText) btnText.textContent = 'Resume Recording';
+
     pauseRecordingBtn.disabled = true;
     recordingStatus.textContent = 'Paused';
     recordingStatus.style.color = '#64748b';
