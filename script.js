@@ -19,6 +19,18 @@ auth.onAuthStateChanged((user) => {
     // User is authenticated (anonymous)
     currentUser = user;
 
+    // Update user display
+    const userEmailEl = document.getElementById('userEmail');
+    if (userEmailEl) {
+        if (user.isAnonymous) {
+            userEmailEl.textContent = 'Guest Session';
+        } else if (user.email) {
+            userEmailEl.textContent = user.email;
+        } else {
+            userEmailEl.textContent = 'Active Session';
+        }
+    }
+
     // Load user data
     loadUserData();
 });
