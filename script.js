@@ -63,6 +63,18 @@ let currentFilter = 'all';
 let searchQuery = '';
 let currentProjectId = null; // ID of the currently open project
 
+// Interview Session State
+let currentInterviewId = null;
+let isRecording = false;
+let isPaused = false;
+let startTime = null;
+let timerInterval = null;
+let recognition = null;
+let transcriptSegments = []; // { id, text, timestamp, notes: [] }
+let currentSegment = null;
+let generalNotes = []; // { content, timestamp }
+let selectedSegmentId = null; // For inline notes
+
 // DOM Elements - Views
 const projectsOverview = document.getElementById('projectsOverview');
 const projectDetailView = document.getElementById('projectDetailView');
@@ -148,7 +160,35 @@ document.addEventListener('DOMContentLoaded', () => {
             deleteProject(currentProjectId);
         }
     });
+
+    // Interview Back Button
+    const backToDashboardBtn = document.getElementById('backToDashboardBtn');
+    if (backToDashboardBtn) {
+        backToDashboardBtn.addEventListener('click', closeInterview);
+    }
+
+    // Interview Recording Listeners
+    initInterviewListeners();
 });
+
+// DOM Elements - Interview Workspace
+const interviewWorkspace = document.querySelector('.interview-workspace');
+const workspaceGuidelineTitle = document.getElementById('workspaceGuidelineTitle');
+const workspaceQuestionsList = document.getElementById('workspaceQuestionsList');
+const transcriptionFeed = document.getElementById('transcriptionFeed');
+const recordingTimer = document.getElementById('recordingTimer');
+const recordingStatus = document.getElementById('recordingStatus');
+
+const startRecordingBtn = document.getElementById('startRecordingBtn');
+const pauseRecordingBtn = document.getElementById('pauseRecordingBtn');
+const stopRecordingBtn = document.getElementById('stopRecordingBtn');
+
+const generalNotesTextarea = document.getElementById('generalNotesTextarea');
+const submitGeneralNoteBtn = document.getElementById('submitGeneralNoteBtn');
+
+const inlineNotePopdown = document.getElementById('inlineNotePopdown');
+const inlineNoteInput = document.getElementById('inlineNoteInput');
+const saveInlineNoteBtn = document.getElementById('saveInlineNoteBtn');
 
 // Event Listeners - Overview
 createBtn.addEventListener('click', openCreateModal);
@@ -229,6 +269,7 @@ function render() {
     const interviewId = urlParams.get('interview');
 
     if (interviewId) {
+        document.body.classList.add('fullscreen-active');
         projectsOverview.classList.add('hidden');
         projectDetailView.classList.add('hidden');
         emptyState.classList.add('hidden');
@@ -1320,17 +1361,55 @@ async function loadInterviewView(interviewId) {
     url.searchParams.set('interview', interviewId);
     window.history.pushState({}, '', url);
 
+    currentInterviewId = interviewId;
+
     // UI State
+    document.body.classList.add('fullscreen-active');
     projectsOverview.classList.add('hidden');
     projectDetailView.classList.add('hidden');
     interviewDetailView.classList.remove('hidden');
 
     interviewDetailTitle.textContent = 'Loading...';
+    transcriptionFeed.innerHTML = '<p style="text-align: center; color: var(--text-muted); margin-top: 2rem;">Click the red button to start the interview transcription.</p>';
+    recordingTimer.textContent = '00:00';
+    recordingStatus.textContent = 'Ready';
+    transcriptSegments = [];
+    generalNotes = [];
 
     try {
         const interview = await window.loadInterviewFromFirestore(interviewId);
         if (interview) {
             interviewDetailTitle.textContent = interview.title;
+
+            // Load Guideline for the sidebar
+            if (interview.guidelineId) {
+                const guidelines = await window.loadAllUserGuidelines();
+                const guidelineData = guidelines.find(g => g.id === interview.guidelineId);
+
+                if (guidelineData) {
+                    workspaceGuidelineTitle.textContent = guidelineData.title;
+                    // We need to fetch full guideline with questions
+                    const fullGuidelines = await window.loadGuidelines(interview.projectId);
+                    const fullGuideline = fullGuidelines.find(g => g.id === interview.guidelineId);
+
+                    if (fullGuideline && fullGuideline.questions) {
+                        workspaceQuestionsList.innerHTML = fullGuideline.questions.map(q => `
+                            <div class="guideline-q-item">
+                                ${escapeHtml(q.text)}
+                                ${q.subquestions && q.subquestions.length > 0 ? `
+                                    <ul style="margin-top: 0.5rem; padding-left: 1.25rem; font-weight: normal; font-size: 0.85rem; color: var(--text-muted);">
+                                        ${q.subquestions.map(sq => `<li>${escapeHtml(sq)}</li>`).join('')}
+                                    </ul>
+                                ` : ''}
+                            </div>
+                        `).join('');
+                    } else {
+                        workspaceQuestionsList.innerHTML = '<p style="color: var(--text-muted);">No questions found.</p>';
+                    }
+                } else {
+                    workspaceGuidelineTitle.textContent = 'Guideline not found';
+                }
+            }
         } else {
             interviewDetailTitle.textContent = 'Interview Not Found';
         }
@@ -1349,4 +1428,278 @@ window.openProject = function (id) {
     if (_superOpenProject) _superOpenProject(id);
     const project = projects.find(p => p.id === id);
     if (project) renderGuidelinesList(project);
+}
+
+// ============================================================================
+// INTERVIEW RECORDING LOGIC
+// ============================================================================
+
+function initInterviewListeners() {
+    if (startRecordingBtn) startRecordingBtn.addEventListener('click', startInterview);
+    if (pauseRecordingBtn) pauseRecordingBtn.addEventListener('click', pauseInterview);
+    if (stopRecordingBtn) stopRecordingBtn.addEventListener('click', stopInterview);
+
+    if (submitGeneralNoteBtn) submitGeneralNoteBtn.addEventListener('click', saveGeneralNote);
+    if (generalNotesTextarea) {
+        generalNotesTextarea.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+                saveGeneralNote();
+            }
+        });
+    }
+
+    if (saveInlineNoteBtn) saveInlineNoteBtn.addEventListener('click', saveInlineNote);
+
+    // Global click to hide popdown
+    document.addEventListener('mousedown', (e) => {
+        if (inlineNotePopdown && !inlineNotePopdown.classList.contains('hidden') &&
+            !inlineNotePopdown.contains(e.target) &&
+            !e.target.classList.contains('transcript-segment')) {
+            inlineNotePopdown.classList.add('hidden');
+        }
+    });
+}
+
+function startInterview() {
+    if (isRecording && !isPaused) return;
+
+    if (!startTime) {
+        startTime = Date.now();
+        transcriptionFeed.innerHTML = ''; // Clear prompt
+    }
+
+    isRecording = true;
+    isPaused = false;
+
+    startRecordingBtn.disabled = true;
+    pauseRecordingBtn.disabled = false;
+    stopRecordingBtn.disabled = false;
+    recordingStatus.textContent = 'Recording...';
+    recordingStatus.style.color = 'var(--brand-primary)';
+
+    startTimer();
+    startTranscription();
+}
+
+function pauseInterview() {
+    if (!isRecording) return;
+
+    isPaused = true;
+    isRecording = false;
+
+    startRecordingBtn.disabled = false;
+    pauseRecordingBtn.disabled = true;
+    recordingStatus.textContent = 'Paused';
+    recordingStatus.style.color = '#64748b';
+
+    stopTimer();
+    stopTranscription();
+}
+
+async function stopInterview() {
+    if (!confirm('Stop and finalize this interview session?')) return;
+
+    isRecording = false;
+    isPaused = false;
+    stopTimer();
+    stopTranscription();
+
+    recordingStatus.textContent = 'Processing...';
+
+    try {
+        await finalizeInterview();
+        showToast('Interview saved successfully');
+        closeInterview();
+    } catch (error) {
+        console.error('Error saving interview session:', error);
+        alert('Failed to save interview session.');
+    }
+}
+
+function closeInterview() {
+    document.body.classList.remove('fullscreen-active');
+    currentInterviewId = null;
+    startTime = null;
+    elapsedTime = 0;
+    transcriptSegments = [];
+    generalNotes = [];
+
+    // Clear URL param
+    const url = new URL(window.location);
+    url.searchParams.delete('interview');
+    window.history.pushState({}, '', url);
+
+    render();
+}
+
+// Timer Logic
+function startTimer() {
+    if (timerInterval) clearInterval(timerInterval);
+    timerInterval = setInterval(() => {
+        const now = Date.now();
+        const diff = now - startTime;
+        const totalSeconds = Math.floor(diff / 1000);
+        const mins = Math.floor(totalSeconds / 60).toString().padStart(2, '0');
+        const secs = (totalSeconds % 60).toString().padStart(2, '0');
+        recordingTimer.textContent = `${mins}:${secs}`;
+    }, 1000);
+}
+
+function stopTimer() {
+    clearInterval(timerInterval);
+}
+
+// Transcription Logic (WebSpeech API)
+function startTranscription() {
+    window.SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!window.SpeechRecognition) {
+        alert('Web Speech API is not supported in this browser. Please use Chrome.');
+        return;
+    }
+
+    if (!recognition) {
+        recognition = new SpeechRecognition();
+        recognition.continuous = true;
+        recognition.interimResults = true;
+        recognition.lang = 'en-US';
+
+        recognition.onresult = (event) => {
+            let interimTranscript = '';
+            for (let i = event.resultIndex; i < event.results.length; ++i) {
+                const transcript = event.results[i][0].transcript;
+                if (event.results[i].isFinal) {
+                    addTranscriptSegment(transcript);
+                } else {
+                    interimTranscript += transcript;
+                }
+            }
+            updateInterimDisplay(interimTranscript);
+        };
+
+        recognition.onend = () => {
+            if (isRecording) recognition.start(); // Keep it alive
+        };
+
+        recognition.onerror = (event) => {
+            console.error('Speech recognition error:', event.error);
+        };
+    }
+
+    try {
+        recognition.start();
+    } catch (e) {
+        // Recognition already started or other error
+    }
+}
+
+function stopTranscription() {
+    if (recognition) {
+        recognition.stop();
+    }
+}
+
+function addTranscriptSegment(text) {
+    if (!text.trim()) return;
+
+    const timestamp = Date.now() - startTime;
+    const id = 'seg_' + Date.now();
+    const segment = { id, text, timestamp, notes: [] };
+    transcriptSegments.push(segment);
+
+    // Remove interim
+    const interim = document.getElementById('interimSegment');
+    if (interim) interim.remove();
+
+    renderSegment(segment);
+}
+
+function updateInterimDisplay(text) {
+    if (!text.trim()) return;
+
+    let interim = document.getElementById('interimSegment');
+    if (!interim) {
+        interim = document.createElement('div');
+        interim.id = 'interimSegment';
+        interim.className = 'transcript-segment';
+        interim.style.opacity = '0.6';
+        interim.style.fontStyle = 'italic';
+        transcriptionFeed.appendChild(interim);
+    }
+    interim.textContent = text;
+    transcriptionFeed.scrollTop = transcriptionFeed.scrollHeight;
+}
+
+function renderSegment(segment) {
+    const el = document.createElement('div');
+    el.className = 'transcript-segment';
+    el.id = segment.id;
+    el.textContent = segment.text;
+
+    el.addEventListener('mouseup', (e) => handleTextSelection(e, segment.id));
+
+    transcriptionFeed.appendChild(el);
+    transcriptionFeed.scrollTop = transcriptionFeed.scrollHeight;
+}
+
+// Note Taking Logic
+function saveGeneralNote() {
+    const content = generalNotesTextarea.value.trim();
+    if (!content) return;
+
+    const timestamp = startTime ? (Date.now() - startTime) : 0;
+    generalNotes.push({ content, timestamp });
+
+    generalNotesTextarea.value = '';
+    showToast('Note captured');
+}
+
+function handleTextSelection(e, segmentId) {
+    const selection = window.getSelection();
+    if (selection.toString().trim().length > 0) {
+        const range = selection.getRangeAt(0);
+        const rect = range.getBoundingClientRect();
+
+        selectedSegmentId = segmentId;
+
+        inlineNotePopdown.style.left = `${rect.left}px`;
+        inlineNotePopdown.style.top = `${rect.top - 50 + window.scrollY}px`;
+        inlineNotePopdown.classList.remove('hidden');
+        inlineNoteInput.focus();
+
+        // Highlight selected text visually if possible (simple way: highlight background of segment)
+        const el = document.getElementById(segmentId);
+        el.classList.add('highlighted');
+    }
+}
+
+function saveInlineNote() {
+    const noteText = inlineNoteInput.value.trim();
+    if (!noteText || !selectedSegmentId) return;
+
+    const segment = transcriptSegments.find(s => s.id === selectedSegmentId);
+    if (segment) {
+        segment.notes.push(noteText);
+
+        // Visual mark
+        const el = document.getElementById(selectedSegmentId);
+        el.title = segment.notes.join('\n'); // Quick hover preview
+    }
+
+    inlineNoteInput.value = '';
+    inlineNotePopdown.classList.add('hidden');
+    showToast('Inline note saved');
+}
+
+async function finalizeInterview() {
+    if (!currentInterviewId) return;
+
+    const duration = Date.now() - startTime;
+
+    await db.collection('interviews').doc(currentInterviewId).update({
+        status: 'completed',
+        duration: duration,
+        transcript: transcriptSegments,
+        generalNotes: generalNotes,
+        finishedAt: firebase.firestore.FieldValue.serverTimestamp()
+    });
 }

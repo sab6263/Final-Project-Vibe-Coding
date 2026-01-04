@@ -236,8 +236,9 @@
             </div>
 
             <!-- VIEW: Interview Detail (Minimal for now) -->
+            <!-- VIEW: Interview Detail (Workspace) -->
             <div id="interviewDetailView" class="hidden">
-                <header class="detail-header">
+                <header class="detail-header" style="margin-bottom: 0;">
                     <div class="header-left">
                         <button id="backToDashboardBtn" class="icon-btn back-btn" title="Back to Dashboard">
                             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor"
@@ -245,11 +246,82 @@
                                 <path d="M19 12H5M12 19l-7-7 7-7" />
                             </svg>
                         </button>
-                        <h1 id="interviewDetailTitle">Interview Title</h1>
+                        <h1 id="interviewDetailTitle">Interview Workspace</h1>
                     </div>
                 </header>
-                <div class="panel" style="padding: 2rem; text-align: center; color: var(--text-muted);">
-                    <p>Interview session active. More features coming soon.</p>
+
+                <div class="interview-workspace">
+                    <!-- LEFT COLUMN: Guideline Overview -->
+                    <aside class="workspace-sidebar">
+                        <div class="sidebar-header">
+                            <h3>Guideline</h3>
+                            <div id="workspaceGuidelineTitle"
+                                style="font-size: 0.9rem; color: var(--text-muted); margin-top: 0.25rem;">Loading...
+                            </div>
+                        </div>
+                        <div class="sidebar-content" id="workspaceQuestionsList">
+                            <!-- Questions list will appear here -->
+                        </div>
+                    </aside>
+
+                    <!-- MAIN COLUMN & BOTTOM PANEL -->
+                    <main class="workspace-main">
+                        <!-- Transcription Area -->
+                        <div class="transcription-card">
+                            <div class="transcription-header">
+                                <div class="recording-controls">
+                                    <button id="startRecordingBtn" class="record-btn btn-start" title="Start Recording">
+                                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none"
+                                            stroke="currentColor" stroke-width="3">
+                                            <circle cx="12" cy="12" r="10"></circle>
+                                            <circle cx="12" cy="12" r="3" fill="currentColor"></circle>
+                                        </svg>
+                                    </button>
+                                    <button id="pauseRecordingBtn" class="record-btn btn-pause" title="Pause" disabled>
+                                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none"
+                                            stroke="currentColor" stroke-width="3">
+                                            <rect x="6" y="4" width="4" height="16"></rect>
+                                            <rect x="14" y="4" width="4" height="16"></rect>
+                                        </svg>
+                                    </button>
+                                    <button id="stopRecordingBtn" class="record-btn btn-stop" title="Stop & Save"
+                                        disabled>
+                                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none"
+                                            stroke="currentColor" stroke-width="3">
+                                            <rect x="4" y="4" width="16" height="16" fill="currentColor"></rect>
+                                        </svg>
+                                    </button>
+                                    <div id="recordingTimer" class="timer-display">00:00</div>
+                                </div>
+                                <div id="recordingStatus"
+                                    style="font-weight: 600; color: var(--text-muted); font-size: 0.9rem;">Ready</div>
+                            </div>
+                            <div id="transcriptionFeed" class="transcription-feed">
+                                <!-- Live transcript segments go here -->
+                                <p style="text-align: center; color: var(--text-muted); margin-top: 2rem;">Click the red
+                                    button to start the interview transcription.</p>
+                            </div>
+                        </div>
+
+                        <!-- BOTTOM PANEL: General Free-Form Notes -->
+                        <div class="notes-panel">
+                            <div class="notes-input-wrapper">
+                                <textarea id="generalNotesTextarea"
+                                    placeholder="Take general notes here... (Ctrl+Enter to save)"></textarea>
+                                <button id="submitGeneralNoteBtn" class="btn-primary"
+                                    style="height: auto; padding: 0 1.5rem;">
+                                    Save Note
+                                </button>
+                            </div>
+                        </div>
+                    </main>
+                </div>
+
+                <!-- Floating Inline Note Popdown (Hidden by default) -->
+                <div id="inlineNotePopdown" class="hidden">
+                    <input type="text" id="inlineNoteInput" placeholder="Add a note to this highlight...">
+                    <button id="saveInlineNoteBtn" class="btn-primary"
+                        style="padding: 0.4rem 0.8rem; font-size: 0.85rem;">Save</button>
                 </div>
             </div>
         </main>
