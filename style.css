@@ -1087,8 +1087,7 @@ body.fullscreen-active #interviewDetailView {
 }
 
 .guideline-q-item.is-completed .q-checkbox {
-    background: #10b981;
-    border-color: #10b981;
+    background: #ea580c;
 }
 
 .q-checkbox::after {

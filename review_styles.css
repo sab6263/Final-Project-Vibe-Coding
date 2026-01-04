@@ -118,3 +118,24 @@
     padding: 0.1rem;
     border-radius: 2px;
 }
+
+/* Visual feedback for dropped notes */
+.review-note-card.just-placed {
+    background: #ffedd5 !important;
+    /* Orange 100 - slightly darker */
+    animation: fade-out-placed 3s forwards;
+}
+
+@keyframes fade-out-placed {
+    0% {
+        background: #ffedd5;
+    }
+
+    70% {
+        background: #ffedd5;
+    }
+
+    100% {
+        background: #fff7ed;
+    }
+}

@@ -258,16 +258,7 @@ if (createInterviewBtn) createInterviewBtn.addEventListener('click', openCreateI
 if (closeInterviewModalIcon) closeInterviewModalIcon.addEventListener('click', closeCreateInterviewModal);
 if (cancelInterviewBtn) cancelInterviewBtn.addEventListener('click', closeCreateInterviewModal);
 if (confirmStartInterviewBtn) confirmStartInterviewBtn.addEventListener('click', submitCreateInterview);
-if (backToDashboardBtn) backToDashboardBtn.addEventListener('click', () => {
-    // Clear URL param
-    const url = new URL(window.location);
-    url.searchParams.delete('interview');
-    window.history.pushState({}, '', url);
-
-    interviewDetailView.classList.add('hidden');
-    projectsOverview.classList.remove('hidden');
-    projectDetailView.classList.add('hidden');
-});
+// backToDashboardBtn listener moved to closeInterview/initInterviewListeners logic
 
 
 searchInput.addEventListener('input', (e) => {
@@ -1412,14 +1403,19 @@ async function loadInterviewView(interviewId) {
 
     // UI State
     document.body.classList.add('fullscreen-active');
-    projectsOverview.classList.add('hidden');
-    projectDetailView.classList.add('hidden');
-    interviewDetailView.classList.remove('hidden');
+    if (projectsOverview) projectsOverview.classList.add('hidden');
+    if (projectDetailView) projectDetailView.classList.add('hidden');
+    if (transcriptReviewView) transcriptReviewView.classList.add('hidden');
+    if (interviewDetailView) interviewDetailView.classList.remove('hidden');
 
-    interviewDetailTitle.textContent = 'Loading...';
-    transcriptionFeed.innerHTML = '<p style="text-align: center; color: var(--text-muted); margin-top: 2rem;">Click the green button to start the interview transcription.</p>';
-    recordingTimer.textContent = '00:00';
-    recordingStatus.textContent = 'Ready';
+    if (interviewDetailTitle) interviewDetailTitle.textContent = 'Loading...';
+    if (transcriptionFeed) transcriptionFeed.innerHTML = '<p style="text-align: center; color: var(--text-muted); margin-top: 2rem;">Click the green button to start the interview transcription.</p>';
+    if (recordingTimer) recordingTimer.textContent = '00:00';
+    if (recordingStatus) {
+        recordingStatus.textContent = 'Ready';
+        if (recordingStatus.parentElement) recordingStatus.parentElement.classList.remove('active');
+    }
+
     transcriptSegments = [];
     generalNotes = [];
     lastSegmentEndTime = null;
@@ -1778,12 +1774,16 @@ function closeInterview() {
  */
 async function warmupMicrophone() {
     if (micStream && micStream.active) return;
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        console.warn('getUserMedia not supported in this environment.');
+        return;
+    }
     try {
         console.log('Requesting persistent microphone access...');
         micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
         console.log('Microphone warmed up and persistent.');
 
-        // Handle stream ending (maintain persistence if possible, though unlikely to end on its own)
+        // Handle stream ending
         micStream.getTracks()[0].onended = () => {
             console.log('Persistent mic stream ended.');
             micStream = null;
@@ -2071,6 +2071,17 @@ function saveGeneralNote() {
     generalNotes.push({ content, timestamp });
 
     generalNotesTextarea.value = '';
+
+    // Provide visual feedback
+    const originalText = submitGeneralNoteBtn.innerHTML;
+    submitGeneralNoteBtn.innerHTML = '✓ Sent';
+    submitGeneralNoteBtn.style.background = '#059669';
+
+    setTimeout(() => {
+        submitGeneralNoteBtn.innerHTML = originalText;
+        submitGeneralNoteBtn.style.background = '';
+    }, 1500);
+
     showToast('Note captured');
 }
 
@@ -2434,7 +2445,9 @@ function renderReview() {
             const segElement = createReviewSegmentElement(item.data);
             reviewFeed.appendChild(segElement);
         } else if (item.type === 'note') {
-            const noteElement = createReviewNoteElement(item.data);
+            // Pass the index in generalNotes for drag and drop
+            const noteIndex = generalNotes.indexOf(item.data);
+            const noteElement = createReviewNoteElement(item.data, noteIndex);
             reviewFeed.appendChild(noteElement);
         }
     });
@@ -2443,14 +2456,14 @@ function renderReview() {
     reviewFeed.scrollTop = 0;
 }
 
+// Firebase Save Logic
 async function saveReviewChanges() {
     if (!currentInterviewId) return;
 
-    const saveBtn = document.getElementById('saveReviewBtn');
-    if (saveBtn) {
-        saveBtn.disabled = true;
-        saveBtn.textContent = 'Saving...';
-    }
+    // Provide visual feedback
+    const originalText = saveReviewBtn.textContent;
+    saveReviewBtn.textContent = 'Saving...';
+    saveReviewBtn.disabled = true;
 
     try {
         await db.collection('interviews').doc(currentInterviewId).update({
@@ -2458,22 +2471,27 @@ async function saveReviewChanges() {
             generalNotes: generalNotes,
             updatedAt: firebase.firestore.FieldValue.serverTimestamp()
         });
-        showToast('Changes saved successfully');
+
+        saveReviewBtn.textContent = 'Saved!';
+        saveReviewBtn.style.background = '#059669';
+
+        setTimeout(() => {
+            saveReviewBtn.textContent = originalText;
+            saveReviewBtn.style.background = '';
+            saveReviewBtn.disabled = false;
+        }, 2000);
+
+        showToast('Changes saved to cloud');
     } catch (error) {
-        console.error('Error saving changes:', error);
-        alert('Failed to save changes.');
-    } finally {
-        if (saveBtn) {
-            saveBtn.disabled = false;
-            saveBtn.innerHTML = `
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
-                    <polyline points="17 21 17 13 7 13 7 21"></polyline>
-                    <polyline points="7 3 7 8 15 8"></polyline>
-                </svg>
-                Save Changes
-            `;
-        }
+        console.error("Error saving review:", error);
+        saveReviewBtn.textContent = 'Error';
+        saveReviewBtn.style.background = '#ef4444';
+        setTimeout(() => {
+            saveReviewBtn.textContent = originalText;
+            saveReviewBtn.style.background = '';
+            saveReviewBtn.disabled = false;
+        }, 2000);
+        showToast('Failed to save changes', 'error');
     }
 }
 
@@ -2527,8 +2545,7 @@ function getMergedTranscript(segments, notes) {
 const revModeEdit = document.getElementById('revModeEdit');
 const revModeNotes = document.getElementById('revModeNotes');
 const speakerLabelsContainer = document.getElementById('speakerLabelsContainer');
-const notesActionsContainer = document.getElementById('notesActionsContainer');
-const revActionAddNote = document.getElementById('revActionAddNote');
+const revNoteInput = document.getElementById('revNoteInput');
 const downloadReviewBtn = document.getElementById('downloadReviewBtn');
 const saveReviewBtn = document.getElementById('saveReviewBtn');
 const revUndoBtn = document.getElementById('revUndoBtn');
@@ -2689,7 +2706,10 @@ function updateToolbarModes() {
 
     // Show/Hide sub-actions
     if (speakerLabelsContainer) speakerLabelsContainer.style.display = reviewEditMode ? 'flex' : 'none';
-    if (notesActionsContainer) notesActionsContainer.style.display = reviewNotesMode ? 'block' : 'none';
+
+    // Toggle the new staging area bar for notes
+    const stagingArea = document.getElementById('notesStagingArea');
+    if (stagingArea) stagingArea.style.display = reviewNotesMode ? 'flex' : 'none';
 
     // Undo/Redo Button Visuals
     if (revUndoBtn) {
@@ -2728,17 +2748,12 @@ if (revModeNotes) {
     });
 }
 
-if (revActionAddNote) {
-    revActionAddNote.addEventListener('click', () => {
-        const noteContent = prompt('Enter your note:');
-        if (noteContent && noteContent.trim()) {
-            const timestamp = Date.now() - (startTime || 0);
-            generalNotes.push({ content: noteContent.trim(), timestamp });
-            reviewRedoStack = []; // Clear redo on action
-            pushToReviewHistory();
-            renderReview();
-            showToast('Note added');
-        }
+if (revNoteInput) {
+    revNoteInput.addEventListener('focus', () => {
+        revNoteInput.style.borderColor = 'var(--brand-primary)';
+    });
+    revNoteInput.addEventListener('blur', () => {
+        revNoteInput.style.borderColor = '#e2e8f0';
     });
 }
 
@@ -2772,22 +2787,70 @@ function initDragAndDrop() {
     document.addEventListener('dragstart', (e) => {
         if (e.target.classList.contains('draggable-label')) {
             e.dataTransfer.setData('speaker', e.target.getAttribute('data-speaker'));
+            e.dataTransfer.setData('type', 'speaker');
             e.dataTransfer.effectAllowed = 'copy';
+        } else if (e.target.id === 'draggableNoteStick') {
+            const content = revNoteInput.value.trim();
+            if (!content) {
+                e.preventDefault();
+                showToast('Type a note first!', 'error');
+                return;
+            }
+            e.dataTransfer.setData('content', content);
+            e.dataTransfer.setData('type', 'new-note');
+            e.dataTransfer.effectAllowed = 'copy';
+
+            // Create preview ghost element that looks like a real note
+            const dragImg = document.createElement('div');
+            dragImg.className = 'review-item review-note-card';
+            dragImg.style.width = '350px';
+            dragImg.style.position = 'absolute';
+            dragImg.style.top = '-1000px';
+            dragImg.style.left = '-1000px';
+            dragImg.style.opacity = '0.9';
+            dragImg.style.boxShadow = '0 10px 15px -3px rgba(0, 0, 0, 0.1)';
+            dragImg.style.pointerEvents = 'none';
+            dragImg.innerHTML = `
+                <div class="review-note-meta" style="margin-bottom: 0.5rem; opacity: 0.7;">
+                    <span style="font-size: 0.75rem; font-weight: 600; text-transform: uppercase;">Session Note (Placing...)</span>
+                </div>
+                <div style="font-size: 0.9rem; color: #1e293b; line-height: 1.5;">${content}</div>
+            `;
+            document.body.appendChild(dragImg);
+
+            // Set the drag image with an offset
+            e.dataTransfer.setDragImage(dragImg, 20, 20);
+
+            // Cleanup ghost element immediately (it stays in drag memory)
+            setTimeout(() => dragImg.remove(), 0);
+        } else if (e.target.classList.contains('review-note-card')) {
+            const noteId = e.target.getAttribute('data-note-id');
+            e.dataTransfer.setData('noteId', noteId);
+            e.dataTransfer.setData('type', 'move-note');
+            e.dataTransfer.effectAllowed = 'move';
+            e.target.style.opacity = '0.5';
         }
     });
 
     document.addEventListener('dragover', (e) => {
-        if (e.target.closest('.review-segment')) {
+        const segment = e.target.closest('.review-segment');
+        if (segment) {
             e.preventDefault();
             e.dataTransfer.dropEffect = 'copy';
-            // Visual feedback
-            e.target.closest('.review-segment').style.background = '#fef3c7';
+            segment.style.background = '#fef3c7';
         }
     });
 
     document.addEventListener('dragleave', (e) => {
-        if (e.target.closest('.review-segment')) {
-            e.target.closest('.review-segment').style.background = '';
+        const segment = e.target.closest('.review-segment');
+        if (segment) {
+            segment.style.background = '';
+        }
+    });
+
+    document.addEventListener('dragend', (e) => {
+        if (e.target.classList.contains('review-note-card')) {
+            e.target.style.opacity = '1';
         }
     });
 
@@ -2797,17 +2860,44 @@ function initDragAndDrop() {
             e.preventDefault();
             segmentDiv.style.background = '';
 
-            const speaker = e.dataTransfer.getData('speaker');
+            const type = e.dataTransfer.getData('type');
             const segmentId = segmentDiv.getAttribute('data-segment-id');
-
-            // Find and update the segment
             const segment = transcriptSegments.find(s => s.id === segmentId);
-            if (segment && segment.speaker !== speaker) {
-                segment.speaker = speaker;
-                reviewRedoStack = []; // Clear redo on action
-                pushToReviewHistory();
-                renderReview();
-                showToast('Speaker label updated');
+
+            if (type === 'speaker') {
+                const speaker = e.dataTransfer.getData('speaker');
+                if (segment && segment.speaker !== speaker) {
+                    pushToReviewHistory();
+                    segment.speaker = speaker;
+                    renderReview();
+                    showToast('Speaker label updated');
+                }
+            } else if (type === 'new-note') {
+                const content = e.dataTransfer.getData('content');
+                if (segment && content) {
+                    pushToReviewHistory();
+                    // Place it exactly at this segment's timestamp
+                    const newNote = { content, timestamp: segment.timestamp, isNew: true };
+                    generalNotes.push(newNote);
+                    if (revNoteInput) revNoteInput.value = ''; // Clear input
+                    renderReview();
+                    showToast('Note dropped into transcript');
+
+                    // The note is now rendered, but we want to clear the isNew flag 
+                    // after a while so it doesn't stay dark.
+                    setTimeout(() => {
+                        delete newNote.isNew;
+                    }, 2000);
+                }
+            } else if (type === 'move-note') {
+                const noteId = e.dataTransfer.getData('noteId');
+                const noteIndex = parseInt(noteId);
+                if (!isNaN(noteIndex) && segment) {
+                    pushToReviewHistory();
+                    generalNotes[noteIndex].timestamp = segment.timestamp;
+                    renderReview();
+                    showToast('Note repositioned');
+                }
             }
         }
     });
@@ -2815,6 +2905,87 @@ function initDragAndDrop() {
 
 // Initialize drag and drop
 initDragAndDrop();
+
+// Add global listener for selection in review feed for inline notes
+document.addEventListener('mouseup', (e) => {
+    if (!reviewNotesMode) return;
+
+    // Ignore if clicking inside the popdown itself
+    if (e.target.closest('#inlineNotePopdown')) return;
+
+    const selection = window.getSelection();
+    const rawText = selection.toString();
+    const selectedText = rawText.trim();
+
+    if (selectedText.length > 0) {
+        const segmentDiv = e.target.closest('.review-segment');
+        if (segmentDiv) {
+            const segmentId = segmentDiv.getAttribute('data-segment-id');
+            const segment = transcriptSegments.find(s => s.id === segmentId);
+
+            if (segment) {
+                const textSpan = segmentDiv.querySelector('span:last-child');
+                const range = selection.getRangeAt(0);
+
+                // Calculate robust start offset
+                let startOffset = 0;
+                const walker = document.createTreeWalker(textSpan, NodeFilter.SHOW_TEXT, null, false);
+                let node = walker.nextNode();
+                while (node) {
+                    if (node === range.startContainer) {
+                        startOffset += range.startOffset;
+                        break;
+                    }
+                    startOffset += node.textContent.length;
+                    node = walker.nextNode();
+                }
+
+                const leadingSpaces = rawText.indexOf(selectedText);
+                const finalStart = startOffset + (leadingSpaces > 0 ? leadingSpaces : 0);
+
+                currentSelection = {
+                    text: selectedText,
+                    start: finalStart,
+                    end: finalStart + selectedText.length
+                };
+                selectedSegmentId = segmentId;
+
+                // Visually highlight immediately
+                const mark = document.createElement('mark');
+                mark.className = 'word-highlight';
+                mark.style.opacity = '0.7';
+                try {
+                    range.surroundContents(mark);
+                    currentTempMark = mark;
+                } catch (err) {
+                    console.warn('Could not wrap selection in mark:', err);
+                }
+
+                // Show popdown
+                const rect = range.getBoundingClientRect();
+                inlineNotePopdown.style.top = `${window.scrollY + rect.bottom + 10}px`;
+                inlineNotePopdown.style.left = `${window.scrollX + rect.left}px`;
+                inlineNotePopdown.classList.remove('hidden');
+
+                setTimeout(() => inlineNoteInput.focus(), 50);
+            }
+        }
+    } else {
+        // If clicking away and not on the popdown, hide it
+        if (!e.target.closest('#inlineNotePopdown')) {
+            inlineNotePopdown.classList.add('hidden');
+            currentSelection = null;
+            // Remove temporary mark if note wasn't saved
+            if (currentTempMark) {
+                // Actually we don't need to remove it manually if we just re-render on save
+                // But if they click away we should probably re-render or unwrap.
+                // Re-rendering is safest.
+                renderReview();
+                currentTempMark = null;
+            }
+        }
+    }
+});
 
 function createReviewSegmentElement(segment) {
     const div = document.createElement('div');
@@ -3034,9 +3205,13 @@ function createReviewSegmentElement(segment) {
     return div;
 }
 
-function createReviewNoteElement(note) {
+function createReviewNoteElement(note, index) {
     const div = document.createElement('div');
     div.className = 'review-item review-note-card';
+    if (note.isNew) div.classList.add('just-placed');
+    div.draggable = true;
+    div.setAttribute('data-note-id', index);
+    div.title = "Drag to reposition in transcript";
 
     const meta = document.createElement('div');
     meta.className = 'review-note-meta';
