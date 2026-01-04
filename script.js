@@ -192,11 +192,7 @@ const transcriptionFeed = document.getElementById('transcriptionFeed');
 const recordingTimer = document.getElementById('recordingTimer');
 const recordingStatus = document.getElementById('recordingStatus');
 
-// Custom Language Selector Refs
-const languageTrigger = document.getElementById('languageTrigger');
-const languageOptions = document.getElementById('languageOptions');
-const currentLanguageText = document.getElementById('currentLanguageText');
-let currentTranscriptionLanguage = 'de-DE';
+let currentTranscriptionLanguage = 'de-DE'; // Default to German, can be empty for auto
 
 const startRecordingBtn = document.getElementById('startRecordingBtn');
 const stopRecordingBtn = document.getElementById('stopRecordingBtn');
@@ -1516,42 +1512,7 @@ function initInterviewListeners() {
 
     if (saveInlineNoteBtn) saveInlineNoteBtn.addEventListener('click', saveInlineNote);
 
-    // Custom Language Dropdown Logic
-    if (languageTrigger) {
-        languageTrigger.addEventListener('click', (e) => {
-            e.stopPropagation();
-            languageOptions.classList.toggle('hidden');
-        });
-    }
-
-    if (languageOptions) {
-        languageOptions.querySelectorAll('.option').forEach(opt => {
-            opt.addEventListener('click', (e) => {
-                e.stopPropagation();
-                const value = opt.getAttribute('data-value');
-                const text = opt.textContent;
-
-                // Update State
-                currentTranscriptionLanguage = value;
-                currentLanguageText.textContent = text;
-
-                // Update UI selection
-                languageOptions.querySelectorAll('.option').forEach(o => o.classList.remove('selected'));
-                opt.classList.add('selected');
-
-                // Close menu
-                languageOptions.classList.add('hidden');
-
-                // Restart transcription if recording to apply language change immediately
-                if (isRecording) {
-                    console.log('Language changed to', value, '- restarting transcription');
-                    startTranscription();
-                }
-            });
-        });
-    }
-
-    // Global click to hide popdown and custom dropdown
+    // Global click to hide popdown
     document.addEventListener('mousedown', (e) => {
         // Hide inline note popdown
         if (inlineNotePopdown && !inlineNotePopdown.classList.contains('hidden') &&
@@ -1559,14 +1520,10 @@ function initInterviewListeners() {
             !e.target.classList.contains('transcript-segment')) {
             inlineNotePopdown.classList.add('hidden');
         }
-
-        // Hide language dropdown only if clicking outside both the trigger and the options
-        if (languageOptions && !languageOptions.classList.contains('hidden') &&
-            !languageTrigger.contains(e.target) &&
-            !languageOptions.contains(e.target)) {
-            languageOptions.classList.add('hidden');
-        }
     });
+
+    // Custom Language Dropdown Logic
+
 }
 
 function startInterview() {
