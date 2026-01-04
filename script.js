@@ -173,6 +173,38 @@ if (confirmDeleteBtn) confirmDeleteBtn.addEventListener('click', confirmDeleteAc
 if (cancelDeleteBtn) cancelDeleteBtn.addEventListener('click', closeDeleteModal);
 if (closeDeleteModalIcon) closeDeleteModalIcon.addEventListener('click', closeDeleteModal);
 
+// DOM Elements - Interview
+const createInterviewBtn = document.getElementById('createInterviewBtn');
+const interviewDetailView = document.getElementById('interviewDetailView');
+const interviewDetailTitle = document.getElementById('interviewDetailTitle');
+const backToDashboardBtn = document.getElementById('backToDashboardBtn');
+
+// DOM Elements - Create Interview Modal
+const createInterviewModal = document.getElementById('createInterviewModal');
+const closeInterviewModalIcon = document.getElementById('closeInterviewModalIcon');
+const cancelInterviewBtn = document.getElementById('cancelInterviewBtn');
+const confirmStartInterviewBtn = document.getElementById('confirmStartInterviewBtn');
+const interviewTitleInput = document.getElementById('interviewTitle');
+const interviewGuidelineSelect = document.getElementById('interviewGuideline');
+const interviewParticipantInput = document.getElementById('interviewParticipant');
+const interviewRoundInput = document.getElementById('interviewRound');
+
+// Interview Listeners
+if (createInterviewBtn) createInterviewBtn.addEventListener('click', openCreateInterviewModal);
+if (closeInterviewModalIcon) closeInterviewModalIcon.addEventListener('click', closeCreateInterviewModal);
+if (cancelInterviewBtn) cancelInterviewBtn.addEventListener('click', closeCreateInterviewModal);
+if (confirmStartInterviewBtn) confirmStartInterviewBtn.addEventListener('click', submitCreateInterview);
+if (backToDashboardBtn) backToDashboardBtn.addEventListener('click', () => {
+    // Clear URL param
+    const url = new URL(window.location);
+    url.searchParams.delete('interview');
+    window.history.pushState({}, '', url);
+
+    interviewDetailView.classList.add('hidden');
+    projectsOverview.classList.remove('hidden');
+    projectDetailView.classList.add('hidden');
+});
+
 
 searchInput.addEventListener('input', (e) => {
     searchQuery = e.target.value.toLowerCase();
@@ -192,6 +224,22 @@ filterBtns.forEach(btn => {
  * Core Render Function
  */
 function render() {
+    // Check for Interview Mode
+    const urlParams = new URLSearchParams(window.location.search);
+    const interviewId = urlParams.get('interview');
+
+    if (interviewId) {
+        projectsOverview.classList.add('hidden');
+        projectDetailView.classList.add('hidden');
+        emptyState.classList.add('hidden');
+        projectsContainer.classList.add('hidden');
+
+        if (interviewDetailView.classList.contains('hidden')) {
+            loadInterviewView(interviewId);
+        }
+        return;
+    }
+
     // Determine visibility based on project count
     if (projects.length === 0) {
         projectsContainer.classList.add('hidden');
@@ -288,6 +336,9 @@ async function openProject(id) {
         project.guidelines = [];
         renderGuidelinesList(project);
     }
+
+    // Load and render interviews
+    renderInterviewsList(id);
 
     // Switch View
     projectsOverview.classList.add('hidden');
@@ -1023,14 +1074,23 @@ async function saveGuideline() {
 
     try {
         if (currentGuidelineParams.guidelineId) {
-            // Update Existing - TODO: implement updateGuideline in firebase-data.js
+            // Update Existing
+            console.log('Updating existing guideline...');
+            await window.updateGuidelineInFirestore(currentGuidelineParams.guidelineId, {
+                name: title
+            });
+
+            // Update questions
+            await window.saveQuestionsToFirestore(currentGuidelineParams.guidelineId, questions);
+
+            // Update local state
             const guideline = project.guidelines.find(g => g.id === currentGuidelineParams.guidelineId);
             if (guideline) {
                 guideline.title = title;
                 guideline.questions = questions;
                 guideline.updatedAt = { toMillis: () => Date.now() };
-                showToast('Guideline updated');
             }
+            showToast('Guideline updated');
         } else {
             // Create New - Save to Firestore
             console.log('Attempting to save guideline...');
@@ -1103,6 +1163,47 @@ function renderGuidelinesList(project) {
     `).join('');
 }
 
+async function renderInterviewsList(projectId) {
+    const list = document.getElementById('interviewsList');
+    if (!list) return;
+
+    list.innerHTML = '<p style="text-align: center; color: var(--text-muted); padding: 1rem;">Loading interviews...</p>';
+
+    try {
+        const interviews = await window.loadInterviewsForProject(projectId);
+
+        if (!interviews || interviews.length === 0) {
+            list.className = 'list-container empty-list-placeholder';
+            list.innerHTML = '<p>No interviews yet.</p>';
+            return;
+        }
+
+        list.className = 'list-container';
+        list.innerHTML = interviews.map(i => `
+            <div class="card-item-row" onclick="loadInterviewView('${i.id}')" style="cursor: pointer; padding: 1rem; background: rgba(255,255,255,0.6); border-radius: var(--radius-md); border: 1px solid rgba(0,0,0,0.05); margin-bottom: 0.5rem; display: flex; justify-content: space-between; align-items: center; transition: all 0.2s;">
+                <div>
+                    <div style="font-weight: 600; color: var(--text-title);">${escapeHtml(i.title)}</div>
+                    ${i.participant ? `<div style="font-size: 0.85rem; color: var(--text-muted); margin-top: 0.25rem;">Participant: ${escapeHtml(i.participant)}</div>` : ''}
+                </div>
+                <div style="display: flex; align-items: center; gap: 0.75rem;">
+                    <span style="font-size: 0.85rem; color: var(--text-muted);">
+                        ${i.createdAt ? new Date(i.createdAt.toMillis()).toLocaleDateString() : 'Just now'}
+                    </span>
+                    <button class="delete-item-btn" onclick="deleteInterview(event, '${i.id}', '${projectId}')" style="padding: 0.25rem;">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <polyline points="3 6 5 6 21 6"></polyline>
+                            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                        </svg>
+                    </button>
+                </div>
+            </div>
+        `).join('');
+    } catch (error) {
+        console.error('Error rendering interviews list:', error);
+        list.innerHTML = '<p style="text-align: center; color: var(--brand-primary); padding: 1rem;">Error loading interviews</p>';
+    }
+}
+
 // Global helpers for inline onclicks
 window.editGuideline = function (projectId, guidelineId) {
     if (projectId && guidelineId) {
@@ -1117,6 +1218,130 @@ window.deleteGuideline = function (event, projectId, guidelineId) {
         deleteGuidelineWithModal(projectId, guidelineId);
     }
 };
+
+window.deleteInterview = async function (event, interviewId, projectId) {
+    event.stopPropagation();
+    if (confirm('Are you sure you want to delete this interview?')) {
+        try {
+            await window.deleteInterviewFromFirestore(interviewId);
+            showToast('Interview deleted');
+            renderInterviewsList(projectId);
+        } catch (error) {
+            console.error('Error deleting interview:', error);
+            alert('Failed to delete interview');
+        }
+    }
+};
+
+// ===================================
+// INTERVIEW LOGIC
+// ===================================
+
+async function openCreateInterviewModal() {
+    createInterviewModal.classList.remove('hidden');
+
+    // Reset fields
+    interviewTitleInput.value = '';
+    interviewParticipantInput.value = '';
+    interviewRoundInput.value = '';
+
+    // Load guidelines
+    interviewGuidelineSelect.innerHTML = '<option value="" disabled selected>Loading guidelines...</option>';
+
+    try {
+        const guidelines = await window.loadAllUserGuidelines();
+
+        let displayGuidelines = guidelines;
+        if (currentProjectId) {
+            displayGuidelines = guidelines.filter(g => g.projectId === currentProjectId);
+        }
+
+        if (displayGuidelines.length === 0) {
+            interviewGuidelineSelect.innerHTML = '<option value="" disabled selected>No guidelines found for this project.</option>';
+        } else {
+            interviewGuidelineSelect.innerHTML = '<option value="" disabled selected>Select a guideline...</option>';
+            displayGuidelines.forEach(g => {
+                const option = document.createElement('option');
+                option.value = g.id;
+                option.textContent = g.title || 'Untitled Guideline';
+                interviewGuidelineSelect.appendChild(option);
+            });
+        }
+    } catch (error) {
+        console.error('Error loading guidelines:', error);
+        interviewGuidelineSelect.innerHTML = '<option value="" disabled selected>Error loading guidelines</option>';
+    }
+}
+
+function closeCreateInterviewModal() {
+    createInterviewModal.classList.add('hidden');
+}
+
+async function submitCreateInterview() {
+    const title = interviewTitleInput.value.trim();
+    const guidelineId = interviewGuidelineSelect.value;
+
+    if (!title) {
+        alert('Please enter an interview title.');
+        return;
+    }
+    if (!guidelineId) {
+        alert('Please select a guideline.');
+        return;
+    }
+
+    confirmStartInterviewBtn.disabled = true;
+    confirmStartInterviewBtn.textContent = 'Creating...';
+
+    try {
+        const interviewId = await window.saveInterviewToFirestore({
+            title: title,
+            guidelineId: guidelineId,
+            projectId: currentProjectId, // Pass the project context
+            participant: interviewParticipantInput.value.trim(),
+            round: interviewRoundInput.value.trim()
+        });
+
+        closeCreateInterviewModal();
+        loadInterviewView(interviewId);
+
+    } catch (error) {
+        console.error('Failed to create interview:', error);
+        alert('Failed to create interview: ' + error.message);
+    } finally {
+        confirmStartInterviewBtn.disabled = false;
+        confirmStartInterviewBtn.textContent = 'Start Interview';
+    }
+}
+
+async function loadInterviewView(interviewId) {
+    // Update URL
+    const url = new URL(window.location);
+    url.searchParams.set('interview', interviewId);
+    window.history.pushState({}, '', url);
+
+    // UI State
+    projectsOverview.classList.add('hidden');
+    projectDetailView.classList.add('hidden');
+    interviewDetailView.classList.remove('hidden');
+
+    interviewDetailTitle.textContent = 'Loading...';
+
+    try {
+        const interview = await window.loadInterviewFromFirestore(interviewId);
+        if (interview) {
+            interviewDetailTitle.textContent = interview.title;
+        } else {
+            interviewDetailTitle.textContent = 'Interview Not Found';
+        }
+    } catch (error) {
+        console.error('Error loading interview:', error);
+        interviewDetailTitle.textContent = 'Error loading interview';
+    }
+}
+
+// Initial URL Check
+
 
 // Wrap openProject to ensure it renders guidelines
 const _superOpenProject = window.openProject;

@@ -252,6 +252,23 @@ async function saveGuidelineToFirestore(guidelineData) {
 }
 
 /**
+ * Update an existing guideline
+ */
+async function updateGuidelineInFirestore(guidelineId, guidelineData) {
+    if (!currentUser) return;
+
+    try {
+        await db.collection('guidelines').doc(guidelineId).update({
+            name: guidelineData.name,
+            updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+        });
+    } catch (error) {
+        console.error('Error updating guideline:', error);
+        throw error;
+    }
+}
+
+/**
  * Upload PDF to Firebase Storage and return download URL
  */
 async function uploadPDF(file, guidelineId) {
@@ -349,28 +366,31 @@ async function loadGuidelines(projectId) {
  * Save questions and subquestions for a guideline
  */
 async function saveQuestionsToFirestore(guidelineId, questionsData) {
-    console.log('saveQuestionsToFirestore called with guidelineId:', guidelineId);
-    console.log('questionsData:', questionsData);
-    console.log('currentUser:', currentUser);
-
-    if (!currentUser) {
-        console.error('No currentUser');
-        throw new Error('User not authenticated');
-    }
-
-    if (!guidelineId) {
-        console.error('No guidelineId provided');
-        throw new Error('guidelineId is required');
-    }
-
-    if (!questionsData || !Array.isArray(questionsData)) {
-        console.error('Invalid questionsData:', questionsData);
-        throw new Error('questionsData must be an array');
-    }
+    if (!currentUser || !guidelineId) return;
 
     try {
         const batch = db.batch();
 
+        // 1. Delete existing questions and subquestions for this guideline
+        const existingQs = await db.collection('questions')
+            .where('guidelineId', '==', guidelineId)
+            .where('userId', '==', currentUser.uid)
+            .get();
+
+        existingQs.forEach(doc => {
+            batch.delete(doc.ref);
+        });
+
+        const existingSubs = await db.collection('subquestions')
+            .where('guidelineId', '==', guidelineId)
+            .where('userId', '==', currentUser.uid)
+            .get();
+
+        existingSubs.forEach(doc => {
+            batch.delete(doc.ref);
+        });
+
+        // 2. Add new questions
         questionsData.forEach((question, qIndex) => {
             const questionRef = db.collection('questions').doc();
             batch.set(questionRef, {
@@ -381,12 +401,13 @@ async function saveQuestionsToFirestore(guidelineId, questionsData) {
                 createdAt: firebase.firestore.FieldValue.serverTimestamp()
             });
 
-            // Handle subquestions if they exist
+            // Handle subquestions
             if (question.subquestions && Array.isArray(question.subquestions)) {
                 question.subquestions.forEach((subq, sqIndex) => {
                     const subqRef = db.collection('subquestions').doc();
                     batch.set(subqRef, {
                         userId: currentUser.uid,
+                        guidelineId: guidelineId,
                         questionId: questionRef.id,
                         text: typeof subq === 'string' ? subq : subq.text || '',
                         order: sqIndex,
@@ -396,9 +417,7 @@ async function saveQuestionsToFirestore(guidelineId, questionsData) {
             }
         });
 
-        console.log('Committing batch with', questionsData.length, 'questions');
         await batch.commit();
-        console.log('Questions saved successfully');
     } catch (error) {
         console.error('Error saving questions:', error);
         throw error;
@@ -481,6 +500,121 @@ async function migrateFromLocalStorage() {
 }
 
 // ============================================================================
+// INTERVIEW OPERATIONS
+// ============================================================================
+
+/**
+ * Save a new interview to Firestore
+ */
+async function saveInterviewToFirestore(interviewData) {
+    if (!currentUser) return null;
+
+    try {
+        const payload = {
+            userId: currentUser.uid,
+            title: interviewData.title,
+            guidelineId: interviewData.guidelineId,
+            projectId: interviewData.projectId, // Save Project ID
+            participant: interviewData.participant || '',
+            round: interviewData.round || '',
+            createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+            status: 'planned' // Default status
+        };
+        const docRef = await db.collection('interviews').add(payload);
+
+        return docRef.id;
+    } catch (error) {
+        console.error('Error saving interview:', error);
+        throw error;
+    }
+}
+
+/**
+ * Load interviews for a specific project
+ */
+window.loadInterviewsForProject = async function (projectId) {
+    if (!currentUser || !projectId) return [];
+
+    try {
+        // Query without orderBy to avoid composite index requirement
+        const snapshot = await db.collection('interviews')
+            .where('userId', '==', currentUser.uid)
+            .where('projectId', '==', projectId)
+            .get();
+
+        const interviews = snapshot.docs.map(doc => ({
+            id: doc.id,
+            ...doc.data()
+        }));
+
+        // Sort locally: newest first
+        interviews.sort((a, b) => {
+            const aTime = a.createdAt?.toMillis() || 0;
+            const bTime = b.createdAt?.toMillis() || 0;
+            return bTime - aTime;
+        });
+
+        return interviews;
+    } catch (error) {
+        console.error("Error loading project interviews:", error);
+        return [];
+    }
+};
+
+/**
+ * Load a single interview by ID
+ */
+async function loadInterviewFromFirestore(interviewId) {
+    if (!currentUser) return null;
+
+    try {
+        const doc = await db.collection('interviews').doc(interviewId).get();
+        if (doc.exists && doc.data().userId === currentUser.uid) {
+            return { id: doc.id, ...doc.data() };
+        } else {
+            return null;
+        }
+    } catch (error) {
+        console.error("Error loading interview:", error);
+        throw error;
+    }
+}
+
+
+/**
+ * Load ALL guidelines for the user (for selection dropdown)
+ * Does NOT fetch questions/subquestions to keep it light.
+ */
+async function loadAllUserGuidelines() {
+    if (!currentUser) return [];
+
+    try {
+        const snapshot = await db.collection('guidelines')
+            .where('userId', '==', currentUser.uid)
+            .get();
+
+        const guidelines = snapshot.docs.map(doc => ({
+            id: doc.id,
+            title: doc.data().name || 'Untitled',
+            projectId: doc.data().projectId,
+            ...doc.data()
+        }));
+
+        // Sort locally
+        guidelines.sort((a, b) => {
+            const aTime = a.createdAt?.toMillis() || 0;
+            const bTime = b.createdAt?.toMillis() || 0;
+            return bTime - aTime; // Newest first
+        });
+
+        return guidelines;
+    } catch (error) {
+        console.error('Error loading all user guidelines:', error);
+        return [];
+    }
+}
+
+// ============================================================================
 // EXPORT FUNCTIONS TO GLOBAL SCOPE
 // ============================================================================
 
@@ -496,3 +630,16 @@ window.uploadPDF = uploadPDF;
 window.loadGuidelines = loadGuidelines;
 window.saveQuestionsToFirestore = saveQuestionsToFirestore;
 window.migrateFromLocalStorage = migrateFromLocalStorage;
+window.loadAllUserGuidelines = loadAllUserGuidelines;
+window.updateGuidelineInFirestore = updateGuidelineInFirestore;
+window.saveInterviewToFirestore = saveInterviewToFirestore;
+window.loadInterviewFromFirestore = loadInterviewFromFirestore;
+window.deleteInterviewFromFirestore = async function (interviewId) {
+    if (!currentUser) return;
+    try {
+        await db.collection('interviews').doc(interviewId).delete();
+    } catch (error) {
+        console.error('Error deleting interview:', error);
+        throw error;
+    }
+};

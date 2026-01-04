@@ -573,6 +573,10 @@ body {
     padding: 2rem;
 }
 
+.input-group {
+    margin-bottom: 1.5rem;
+}
+
 .input-group label {
     display: block;
     margin-bottom: 0.75rem;
@@ -581,7 +585,8 @@ body {
     font-family: var(--font-heading);
 }
 
-.input-group input {
+.input-group input,
+.input-group select {
     width: 100%;
     padding: 1rem;
     border: 2px solid rgba(0, 0, 0, 0.1);
@@ -593,7 +598,13 @@ body {
     font-family: var(--font-heading);
 }
 
-.input-group input:focus {
+.input-group select {
+    cursor: pointer;
+    background-color: rgba(255, 255, 255, 0.5);
+}
+
+.input-group input:focus,
+.input-group select:focus {
     border-color: var(--brand-primary);
     background: white;
     box-shadow: 0 0 0 4px var(--brand-surface);
