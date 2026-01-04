@@ -312,7 +312,8 @@ function render() {
 
     // Filter Logic
     const filteredProjects = projects.filter(project => {
-        const matchesFilter = currentFilter === 'all' || project.status === currentFilter;
+        const matchesFilter = currentFilter === 'all' ||
+            (project.status || 'active').toLowerCase() === currentFilter.toLowerCase();
         const matchesSearch = project.name.toLowerCase().includes(searchQuery);
         return matchesFilter && matchesSearch;
     });
