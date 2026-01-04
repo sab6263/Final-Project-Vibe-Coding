@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Contexture</title>
+    <link rel="stylesheet" href="auth.css">
+</head>
+
+<body>
+    <div class="auth-container">
+        <div class="auth-card">
+            <div class="auth-header">
+                <img src="Logo-contexture.png" alt="Contexture" class="auth-logo">
+                <h1>Contexture</h1>
+                <p class="auth-subtitle">Your private qualitative research workspace</p>
+            </div>
+
+            <!-- Anonymous Auth Info -->
+            <div class="auth-info">
+                <p>✓ No sign-up required</p>
+                <p>✓ Your data stays on your device</p>
+                <p class="privacy-note">⚠️ Clearing browser data will delete your workspace</p>
+            </div>
+
+            <button id="start-btn" class="btn-primary">Start Using Contexture</button>
+
+            <p class="form-error" id="auth-error"></p>
+        </div>
+    </div>
+
+    <!-- Firebase SDKs -->
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
+
+    <!-- Firebase Config -->
+    <script src="firebase-config.js"></script>
+
+    <!-- Auth Logic -->
+    <script src="auth.js"></script>
+</body>
+
+</html>

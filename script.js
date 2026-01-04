@@ -2,7 +2,62 @@
  * Contexture - Application Logic
  */
 
-// State
+// ============================================================================
+// AUTHENTICATION GUARD
+// ============================================================================
+
+let currentUser = null;
+
+// Check authentication status
+auth.onAuthStateChanged((user) => {
+    if (!user) {
+        // Not authenticated - redirect to auth page
+        window.location.href = 'auth.html';
+        return;
+    }
+
+    // User is authenticated (anonymous)
+    currentUser = user;
+
+    // Load user data
+    loadUserData();
+});
+
+// User profile dropdown toggle
+document.addEventListener('DOMContentLoaded', () => {
+    const userProfileBtn = document.getElementById('userProfileBtn');
+    const userDropdown = document.getElementById('userDropdown');
+    const logoutBtn = document.getElementById('logoutBtn');
+
+    if (userProfileBtn && userDropdown) {
+        userProfileBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            userDropdown.classList.toggle('hidden');
+        });
+
+        // Close dropdown when clicking outside
+        document.addEventListener('click', () => {
+            userDropdown.classList.add('hidden');
+        });
+    }
+
+    if (logoutBtn) {
+        logoutBtn.addEventListener('click', async () => {
+            try {
+                await auth.signOut();
+                window.location.href = 'auth.html';
+            } catch (error) {
+                console.error('Logout error:', error);
+                alert('Failed to sign out. Please try again.');
+            }
+        });
+    }
+});
+
+// ============================================================================
+// STATE
+// ============================================================================
+
 let projects = [];
 let currentFilter = 'all';
 let searchQuery = '';
@@ -41,10 +96,13 @@ const projectStatusToggle = document.getElementById('projectStatusToggle');
 const projectStatusLabel = document.getElementById('projectStatusLabel');
 const deleteProjectDetailBtn = document.getElementById('deleteProjectDetailBtn');
 
-// Initialization
+// ============================================================================
+// INITIALIZATION
+// ============================================================================
+
 document.addEventListener('DOMContentLoaded', () => {
-    // Initial Render
-    render();
+    // Initial Render (will be called after auth check)
+    // render(); // Moved to loadUserData()
 
     // Global click to close menus
     document.addEventListener('click', (e) => {
@@ -74,6 +132,9 @@ document.addEventListener('DOMContentLoaded', () => {
             detailProjectTitle.blur(); // Trigger save
         }
     });
+
+    // TODO: Need to update saveProjectTitle to use updateProjectInFirestore logic if it saves to DB
+    // Let's check saveProjectTitle function...
 
     // Status Toggle
     projectStatusToggle.addEventListener('click', () => {
@@ -105,6 +166,13 @@ newProjectNameInput.addEventListener('keydown', (e) => {
     if (e.key === 'Enter') submitCreateProject();
     if (e.key === 'Escape') closeCreateModal();
 });
+
+// Delete Modal Listeners
+// These were missing!
+if (confirmDeleteBtn) confirmDeleteBtn.addEventListener('click', confirmDeleteAction);
+if (cancelDeleteBtn) cancelDeleteBtn.addEventListener('click', closeDeleteModal);
+if (closeDeleteModalIcon) closeDeleteModalIcon.addEventListener('click', closeDeleteModal);
+
 
 searchInput.addEventListener('input', (e) => {
     searchQuery = e.target.value.toLowerCase();
@@ -158,8 +226,8 @@ function render() {
                         <div class="project-date">Updated ${formatDate(project.updatedAt)}</div>
                     </div>
                     <div class="header-right">
-                        <span class="status-badge ${project.status}">
-                            ${project.status}
+                        <span class="status-badge ${project.status?.toLowerCase() || 'active'}">
+                            ${project.status?.toUpperCase() || 'ACTIVE'}
                         </span>
                         <div class="card-menu-container">
                             <button class="icon-btn menu-trigger" onclick="toggleCardMenu(event, '${project.id}')">
@@ -172,7 +240,7 @@ function render() {
                             <!-- Dropdown Menu -->
                             <div id="menu-${project.id}" class="card-dropdown hidden">
                                 <button class="dropdown-item" onclick="toggleProjectStatus(event, '${project.id}')">
-                                    ${project.status === 'active' ? 'Mark as Inactive' : 'Mark as Active'}
+                                    ${(project.status?.toLowerCase() === 'active') ? 'Mark as Inactive' : 'Mark as Active'}
                                 </button>
                                 <button class="dropdown-item delete" onclick="deleteProjectFromMenu(event, '${project.id}')">
                                     Delete Project
@@ -192,7 +260,7 @@ function render() {
 /**
  * Opens a project in Detail View
  */
-function openProject(id) {
+async function openProject(id) {
     const project = projects.find(p => p.id === id);
     if (!project) return;
 
@@ -202,12 +270,23 @@ function openProject(id) {
     detailProjectTitle.textContent = project.name;
 
     // Set Toggle Button State
-    if (project.status === 'active') {
+    if (project.status === 'Active' || project.status === 'active') {
         projectStatusToggle.classList.add('is-active');
         projectStatusToggle.textContent = 'ACTIVE ▼';
     } else {
         projectStatusToggle.classList.remove('is-active');
         projectStatusToggle.textContent = 'INACTIVE ▼';
+    }
+
+    // Load guidelines from Firestore
+    try {
+        const guidelines = await window.loadGuidelines(id);
+        project.guidelines = guidelines;
+        renderGuidelinesList(project);
+    } catch (error) {
+        console.error('Error loading guidelines:', error);
+        project.guidelines = [];
+        renderGuidelinesList(project);
     }
 
     // Switch View
@@ -229,15 +308,23 @@ function closeProject() {
 /**
  * Saves the edited project title
  */
-function saveProjectTitle() {
+async function saveProjectTitle() {
     if (!currentProjectId) return;
 
     const newTitle = detailProjectTitle.textContent.trim();
     const project = projects.find(p => p.id === currentProjectId);
 
     if (project && newTitle && newTitle !== project.name) {
-        project.name = newTitle;
-        project.updatedAt = new Date();
+        try {
+            await window.updateProjectInFirestore(currentProjectId, { name: newTitle });
+            project.name = newTitle;
+            project.updatedAt = { toMillis: () => Date.now() };
+            showToast('Project renamed');
+        } catch (error) {
+            console.error('Error renaming project:', error);
+            detailProjectTitle.textContent = project.name; // Revert
+            alert('Failed to rename project');
+        }
     } else if (!newTitle && project) {
         // Revert if empty
         detailProjectTitle.textContent = project.name;
@@ -247,21 +334,32 @@ function saveProjectTitle() {
 /**
  * Updates status from the Detail View Toggle
  */
-function updateCurrentProjectStatus(activate) {
+async function updateCurrentProjectStatus(activate) {
     if (!currentProjectId) return;
 
     const project = projects.find(p => p.id === currentProjectId);
     if (project) {
-        project.status = activate ? 'active' : 'inactive';
-        project.updatedAt = new Date();
+        const newStatus = activate ? 'Active' : 'Inactive';
 
-        // Update UI
-        if (activate) {
-            projectStatusToggle.classList.add('is-active');
-            projectStatusToggle.textContent = 'ACTIVE ▼';
-        } else {
-            projectStatusToggle.classList.remove('is-active');
-            projectStatusToggle.textContent = 'INACTIVE ▼';
+        try {
+            // Update in Firestore
+            await window.updateProjectInFirestore(currentProjectId, { status: newStatus });
+
+            // Update local state
+            project.status = newStatus;
+            project.updatedAt = { toMillis: () => Date.now() };
+
+            // Update UI
+            if (activate) {
+                projectStatusToggle.classList.add('is-active');
+                projectStatusToggle.textContent = 'ACTIVE ▼';
+            } else {
+                projectStatusToggle.classList.remove('is-active');
+                projectStatusToggle.textContent = 'INACTIVE ▼';
+            }
+        } catch (error) {
+            console.error('Error updating project status:', error);
+            alert('Failed to update status. Please try again.');
         }
     }
 }
@@ -277,13 +375,24 @@ function toggleCardMenu(event, id) {
     if (menu) menu.classList.toggle('hidden');
 }
 
-function toggleProjectStatus(event, id) {
+async function toggleProjectStatus(event, id) {
     event.stopPropagation(); // Stop from opening project
     const project = projects.find(p => p.id === id);
     if (project) {
-        project.status = project.status === 'active' ? 'inactive' : 'active';
-        render();
-        document.querySelectorAll('.card-dropdown').forEach(el => el.classList.add('hidden'));
+        const currentStatusLowercase = (project.status || 'active').toLowerCase();
+        const newStatus = currentStatusLowercase === 'active' ? 'Inactive' : 'Active';
+
+        try {
+            await window.updateProjectInFirestore(id, { status: newStatus });
+
+            project.status = newStatus;
+            project.updatedAt = { toMillis: () => Date.now() };
+            render();
+            document.querySelectorAll('.card-dropdown').forEach(el => el.classList.add('hidden'));
+        } catch (error) {
+            console.error('Error toggling status:', error);
+            alert('Failed to update status');
+        }
     }
 }
 
@@ -327,34 +436,59 @@ function closeDeleteModal() {
     projectIdToDelete = null; // Legacy cleanup
 }
 
-function confirmDeleteAction() {
+async function confirmDeleteAction() {
+    console.log('confirmDeleteAction called');
+    console.log('itemToDelete:', itemToDelete);
+    console.log('projectIdToDelete (legacy):', projectIdToDelete);
+
     if (!itemToDelete) {
         // Fallback for legacy projectIdToDelete if exists (though we replaced calls, safety check)
         if (projectIdToDelete) {
-            projects = projects.filter(p => p.id !== projectIdToDelete);
-            if (currentProjectId === projectIdToDelete) closeProject();
-            else render();
-            showToast('Project deleted');
+            console.log('Using legacy delete for project:', projectIdToDelete);
+            try {
+                await window.deleteProjectFromFirestore(projectIdToDelete);
+                projects = projects.filter(p => p.id !== projectIdToDelete);
+                if (currentProjectId === projectIdToDelete) closeProject();
+                else render();
+                showToast('Project deleted');
+            } catch (error) {
+                console.error('Error deleting project:', error);
+                alert('Failed to delete project. Please try again.');
+            }
         }
         closeDeleteModal();
         return;
     }
 
     if (itemToDelete.type === 'project') {
-        projects = projects.filter(p => p.id !== itemToDelete.id);
-        if (currentProjectId === itemToDelete.id) {
-            closeProject();
-        } else {
-            render();
+        console.log('Deleting project via itemToDelete:', itemToDelete.id);
+        try {
+            await window.deleteProjectFromFirestore(itemToDelete.id);
+            projects = projects.filter(p => p.id !== itemToDelete.id);
+            if (currentProjectId === itemToDelete.id) {
+                closeProject();
+            } else {
+                render();
+            }
+            showToast('Project deleted');
+        } catch (error) {
+            console.error('Error deleting project:', error);
+            alert('Failed to delete project. Please try again.');
         }
-        showToast('Project deleted');
     }
     else if (itemToDelete.type === 'guideline') {
         const project = projects.find(p => p.id === itemToDelete.projectId);
-        if (project && project.guidelines) {
-            project.guidelines = project.guidelines.filter(g => g.id !== itemToDelete.id);
-            renderGuidelinesList(project);
+        try {
+            await window.deleteGuidelineFromFirestore(itemToDelete.id);
+
+            if (project && project.guidelines) {
+                project.guidelines = project.guidelines.filter(g => g.id !== itemToDelete.id);
+                renderGuidelinesList(project);
+            }
             showToast('Guideline deleted');
+        } catch (error) {
+            console.error('Error deleting guideline:', error);
+            alert('Failed to delete guideline');
         }
     }
 
@@ -373,30 +507,61 @@ function closeCreateModal() {
     modal.classList.add('hidden');
 }
 
-function submitCreateProject() {
+async function submitCreateProject() {
     let rawName = newProjectNameInput.value.trim();
     if (!rawName) rawName = "Untitled Project";
 
-    const newProject = {
-        id: Date.now().toString(),
-        name: rawName,
-        status: 'active',
-        updatedAt: new Date()
-    };
+    try {
+        // Save to Firestore
+        const projectId = await window.saveProjectToFirestore({
+            name: rawName,
+            status: 'Active'
+        });
 
-    projects.unshift(newProject);
+        // Add to local array for immediate UI update
+        const newProject = {
+            id: projectId,
+            name: rawName,
+            status: 'Active',
+            userId: currentUser.uid,
+            createdAt: { toMillis: () => Date.now() }, // Mock Firestore timestamp
+            updatedAt: { toMillis: () => Date.now() }
+        };
 
-    // Clear filters
-    if (searchQuery) { searchQuery = ''; searchInput.value = ''; }
-    if (currentFilter !== 'all') { currentFilter = 'all'; }
+        projects.unshift(newProject);
 
-    render();
-    closeCreateModal();
-    showToast(`"${newProject.name}" created`);
+        // Clear filters
+        if (searchQuery) { searchQuery = ''; searchInput.value = ''; }
+        if (currentFilter !== 'all') { currentFilter = 'all'; }
+
+        render();
+        closeCreateModal();
+        showToast(`"${newProject.name}" created`);
+    } catch (error) {
+        console.error('Error creating project:', error);
+        alert('Failed to create project. Please try again.');
+    }
 }
 
 // Helpers
 function formatDate(date) {
+    if (!date) return 'Just now';
+
+    // Handle Firestore Timestamp objects
+    if (date && typeof date.toMillis === 'function') {
+        date = new Date(date.toMillis());
+    }
+
+    // Handle Date objects or timestamps
+    if (!(date instanceof Date)) {
+        date = new Date(date);
+    }
+
+    // Check if valid date
+    if (isNaN(date.getTime())) {
+        return 'Just now';
+    }
+
     return new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', year: 'numeric' }).format(date);
 }
 
@@ -829,7 +994,7 @@ function addQuestionInput(data = { text: '', subquestions: [] }, autoFocus = tru
     if (autoFocus) input.focus();
 }
 
-function saveGuideline() {
+async function saveGuideline() {
     if (!currentGuidelineParams || !currentGuidelineParams.projectId) return;
 
     const project = projects.find(p => p.id === currentGuidelineParams.projectId);
@@ -856,30 +1021,57 @@ function saveGuideline() {
         }
     });
 
-    if (currentGuidelineParams.guidelineId) {
-        // Update Existing
-        const guideline = project.guidelines.find(g => g.id === currentGuidelineParams.guidelineId);
-        if (guideline) {
-            guideline.title = title;
-            guideline.questions = questions;
-            guideline.updatedAt = new Date();
-            showToast('Guideline updated');
-        }
-    } else {
-        // Create New
-        const newGuideline = {
-            id: Date.now().toString(),
-            title: title,
-            questions: questions,
-            createdAt: new Date()
-        };
-        if (!project.guidelines) project.guidelines = [];
-        project.guidelines.push(newGuideline);
-        showToast('Guideline saved');
-    }
+    try {
+        if (currentGuidelineParams.guidelineId) {
+            // Update Existing - TODO: implement updateGuideline in firebase-data.js
+            const guideline = project.guidelines.find(g => g.id === currentGuidelineParams.guidelineId);
+            if (guideline) {
+                guideline.title = title;
+                guideline.questions = questions;
+                guideline.updatedAt = { toMillis: () => Date.now() };
+                showToast('Guideline updated');
+            }
+        } else {
+            // Create New - Save to Firestore
+            console.log('Attempting to save guideline...');
+            console.log('window.saveGuideline exists?', typeof window.saveGuideline);
+            console.log('currentUser:', currentUser);
 
-    closeGuidelineEditor();
-    renderGuidelinesList(project);
+            const guidelineId = await window.saveGuidelineToFirestore({
+                projectId: currentGuidelineParams.projectId,
+                name: title,
+                source: 'manual'
+            });
+
+            console.log('Guideline saved with ID:', guidelineId);
+
+            // Save questions to Firestore
+            if (questions.length > 0) {
+                console.log('Saving questions...');
+                await window.saveQuestionsToFirestore(guidelineId, questions);
+                console.log('Questions saved');
+            }
+
+            // Add to local state for immediate UI update
+            const newGuideline = {
+                id: guidelineId,
+                title: title,
+                questions: questions,
+                createdAt: { toMillis: () => Date.now() }
+            };
+            if (!project.guidelines) project.guidelines = [];
+            project.guidelines.push(newGuideline);
+            showToast('Guideline saved');
+        }
+
+        closeGuidelineEditor();
+        renderGuidelinesList(project);
+    } catch (error) {
+        console.error('Error saving guideline:', error);
+        console.error('Error details:', error.message, error.stack);
+        alert(`Failed to save guideline: ${error.message}\n\nPlease check the console for details.`);
+        // Don't close the editor so user can try again
+    }
 }
 
 function renderGuidelinesList(project) {
