@@ -1604,7 +1604,11 @@ function initInterviewListeners() {
 
 }
 
-function startInterview() {
+async function startInterview() {
+    // Ensure persistent mic stream to prevent permission prompts
+    // Await it so we have the "Recording" tab state active BEFORE SpeechRecognition asks
+    await warmupMicrophone();
+
     if (!startTime) {
         startTime = Date.now();
         transcriptionFeed.innerHTML = '';
@@ -1635,15 +1639,15 @@ function startInterview() {
 }
 
 function toggleSpeaker() {
-    // 1. Determine the NEXT speaker
-    const nextSpeaker = (currentSpeaker === 'interviewer') ? 'respondent' : 'interviewer';
+    // 1. Determine AND UPDATE the speaker immediately
+    currentSpeaker = (currentSpeaker === 'interviewer') ? 'respondent' : 'interviewer';
 
-    // 2. Update UI Immediately (Visual Feedback)
+    // 2. Update UI Immediately
     if (switchSpeakerBtn) {
-        const displayText = nextSpeaker === 'interviewer' ? 'Interviewer' : 'Participant';
+        const displayText = currentSpeaker === 'interviewer' ? 'Interviewer' : 'Participant';
         switchSpeakerBtn.querySelector('span').textContent = displayText;
 
-        if (nextSpeaker === 'respondent') {
+        if (currentSpeaker === 'respondent') {
             switchSpeakerBtn.classList.remove('btn-secondary');
             switchSpeakerBtn.style.color = '#fff';
             switchSpeakerBtn.style.background = '#1e40af';
@@ -1654,19 +1658,10 @@ function toggleSpeaker() {
         }
     }
 
-    // 3. Logic: Force a break in transcription
-    if (isRecording && recognition) {
-        // We do NOT change currentSpeaker yet.
-        // We want pending buffer text (processed in onresult) to use the OLD speaker.
-        // We set a flag so that AFTER the restart, we switch to the new speaker.
-        window.pendingSpeakerSwitch = nextSpeaker;
-
-        // Force pending audio to finalize immediately
-        recognition.stop();
-    } else {
-        // Not recording? Just switch state immediately
-        currentSpeaker = nextSpeaker;
-    }
+    // 3. NO STOP/START. 
+    // We simply let the ongoing recognition session continue. 
+    // When the next sentence is finalized, addTranscriptSegment will pick up the NEW currentSpeaker value automatically.
+    // This avoids the "Stop -> Start" cycle that triggers browser permission prompts on file:// protocols.
 }
 
 function pauseInterview() {
@@ -1728,6 +1723,12 @@ async function stopInterview() {
 }
 
 function closeInterview() {
+    // Ensure everything stops
+    isRecording = false;
+    isPaused = false;
+    stopTranscription();
+    stopTimer();
+
     document.body.classList.remove('fullscreen-active');
     currentInterviewId = null;
     startTime = null;
@@ -1741,23 +1742,36 @@ function closeInterview() {
     window.history.pushState({}, '', url);
 
     // Stop persistent microphone stream
+    // Stop persistent microphone stream
+    // prevent asking for permission again if user starts another interview 
+    /* 
     if (micStream) {
         micStream.getTracks().forEach(track => track.stop());
         micStream = null;
-    }
+    } 
+    */
 
     render();
 }
+
+
 
 /**
  * Requests microphone access once and keeps the stream active
  * to prevent repeated browser permission prompts.
  */
 async function warmupMicrophone() {
-    if (micStream) return;
+    if (micStream && micStream.active) return;
     try {
+        console.log('Requesting persistent microphone access...');
         micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
         console.log('Microphone warmed up and persistent.');
+
+        // Handle stream ending (maintain persistence if possible, though unlikely to end on its own)
+        micStream.getTracks()[0].onended = () => {
+            console.log('Persistent mic stream ended.');
+            micStream = null;
+        };
     } catch (err) {
         console.error('Error warming up microphone:', err);
     }
