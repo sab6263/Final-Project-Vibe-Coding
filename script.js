@@ -87,7 +87,7 @@ let transcriptSegments = []; // { id, text, timestamp, notes: [], speaker: ..., 
 let currentSegment = null;
 let lastSegmentEndTime = null;
 let currentSpeaker = 'interviewer';
-let speakerIdActive = false;
+let speakerIdActive = true; // Default to true to match HTML checked attribute
 let currentSelection = null; // { text, start, end, segmentId }
 let currentTempMark = null; // Reference to the temporary visual highlight
 let generalNotes = []; // { content, timestamp }
@@ -1589,6 +1589,18 @@ function initInterviewListeners() {
     });
 
     // Custom Language Dropdown Logic
+    const languageSelect = document.getElementById('languageSelect');
+    if (languageSelect) {
+        languageSelect.addEventListener('change', (e) => {
+            currentTranscriptionLanguage = e.target.value;
+            console.log('Language changed to:', currentTranscriptionLanguage);
+
+            // If currently recording, restart transcription to apply new language
+            if (isRecording) {
+                startTranscription();
+            }
+        });
+    }
 
 }
 
@@ -1623,13 +1635,18 @@ function startInterview() {
 }
 
 function toggleSpeaker() {
-    currentSpeaker = (currentSpeaker === 'interviewer') ? 'respondent' : 'interviewer';
+    // 1. Determine the NEXT speaker
+    const nextSpeaker = (currentSpeaker === 'interviewer') ? 'respondent' : 'interviewer';
+
+    // 2. Update UI Immediately (Visual Feedback)
     if (switchSpeakerBtn) {
-        switchSpeakerBtn.querySelector('span').textContent = currentSpeaker.charAt(0).toUpperCase() + currentSpeaker.slice(1);
-        if (currentSpeaker === 'respondent') {
+        const displayText = nextSpeaker === 'interviewer' ? 'Interviewer' : 'Participant';
+        switchSpeakerBtn.querySelector('span').textContent = displayText;
+
+        if (nextSpeaker === 'respondent') {
             switchSpeakerBtn.classList.remove('btn-secondary');
             switchSpeakerBtn.style.color = '#fff';
-            switchSpeakerBtn.style.background = '#1e40af'; // respondent blue
+            switchSpeakerBtn.style.background = '#1e40af';
         } else {
             switchSpeakerBtn.classList.add('btn-secondary');
             switchSpeakerBtn.style.background = '';
@@ -1637,16 +1654,18 @@ function toggleSpeaker() {
         }
     }
 
-    // Only add visual break/label if speaker ID is active
-    if (speakerIdActive) {
-        const br = document.createElement('div');
-        br.className = 'transcript-break';
-        transcriptionFeed.appendChild(br);
+    // 3. Logic: Force a break in transcription
+    if (isRecording && recognition) {
+        // We do NOT change currentSpeaker yet.
+        // We want pending buffer text (processed in onresult) to use the OLD speaker.
+        // We set a flag so that AFTER the restart, we switch to the new speaker.
+        window.pendingSpeakerSwitch = nextSpeaker;
 
-        const label = document.createElement('span');
-        label.className = `speaker-label ${currentSpeaker}`;
-        label.textContent = currentSpeaker === 'interviewer' ? 'Interviewer' : 'Respondent';
-        transcriptionFeed.appendChild(label);
+        // Force pending audio to finalize immediately
+        recognition.stop();
+    } else {
+        // Not recording? Just switch state immediately
+        currentSpeaker = nextSpeaker;
     }
 }
 
@@ -1778,19 +1797,43 @@ function startTranscription() {
     }
 
     if (!recognition) {
+        // APPLY PENDING SPEAKER SWITCH
+        // If we stopped previously to switch speakers, apply it now before next segment starts
+        if (window.pendingSpeakerSwitch) {
+            currentSpeaker = window.pendingSpeakerSwitch;
+            window.pendingSpeakerSwitch = null;
+        }
+
         recognition = new SpeechRecognition();
         recognition.continuous = true;
         recognition.interimResults = true;
         recognition.lang = selectedLang;
 
+        // Track the last result index we fully processed to avoid duplicates
+        let lastProcessedIndex = -1;
+
         recognition.onresult = (event) => {
-            if (isPaused) return; // Keep mic open but ignore results while paused
+            if (isPaused) return;
+
+            // Update processed index if the engine reset (e.g. after pause/resume or error)
+            // event.resultIndex is the index of the *first* result in this batch that has changed
+            // If it's smaller than what we've seen, the engine likely reset.
+            if (event.resultIndex < lastProcessedIndex) {
+                lastProcessedIndex = -1;
+            }
 
             let interimTranscript = '';
+
             for (let i = event.resultIndex; i < event.results.length; ++i) {
+                // If we already processed this index as final, skip it
+                if (i <= lastProcessedIndex && event.results[i].isFinal) {
+                    continue;
+                }
+
                 const transcript = event.results[i][0].transcript;
                 if (event.results[i].isFinal) {
                     addTranscriptSegment(transcript);
+                    lastProcessedIndex = i;
                 } else {
                     interimTranscript += transcript;
                 }
@@ -1800,11 +1843,22 @@ function startTranscription() {
 
         recognition.onend = () => {
             if (isRecording) {
-                try {
-                    recognition.start();
-                } catch (e) {
-                    // Already started
-                }
+                // Small delay to prevent "restart too fast" errors and ensure clean state
+                setTimeout(() => {
+                    // APPLY PENDING SPEAKER SWITCH (Critical for toggleSpeaker logic)
+                    if (window.pendingSpeakerSwitch) {
+                        currentSpeaker = window.pendingSpeakerSwitch;
+                        window.pendingSpeakerSwitch = null;
+                    }
+
+                    if (isRecording) {
+                        try {
+                            recognition.start();
+                        } catch (e) {
+                            console.warn('Recognition restart failed, retrying...', e);
+                        }
+                    }
+                }, 200);
             }
         };
 
@@ -1812,14 +1866,17 @@ function startTranscription() {
             console.error('Speech recognition error:', event.error);
             if (event.error === 'not-allowed') {
                 alert('Microphone access was denied. Please check your browser settings.');
+                isRecording = false; // Force stop state to prevent infinite loop
+                stopTimer();
             }
+            // Ignore 'no-speech' errors as they are normal during pauses
         };
     }
 
     try {
         recognition.start();
     } catch (e) {
-        // Recognition already started or other error
+        // Recognition might already be active
     }
 }
 
@@ -1829,37 +1886,48 @@ function stopTranscription() {
     }
 }
 
+// State for last speaker to prevent redundant labels
+let lastLoggedSpeaker = null;
+
 function addTranscriptSegment(text) {
     if (!text.trim()) return;
 
     const now = Date.now();
     const pauseThreshold = 2000; // 2 seconds silence = new line
+    const isPause = lastSegmentEndTime && (now - lastSegmentEndTime > pauseThreshold);
 
-    const isSpeakerChangePrompt = lastSegmentEndTime && (now - lastSegmentEndTime > pauseThreshold);
+    // Determines if we need a new label line
+    let shouldAddLabel = false;
 
     if (speakerIdActive) {
-        if (isSpeakerChangePrompt) {
-            const br = document.createElement('div');
-            br.className = 'transcript-break';
-            transcriptionFeed.appendChild(br);
+        // Add label if:
+        // 1. It's the very first segment
+        // 2. The speaker has changed from the last logged one
+        // 3. There was a significant pause (optional, but good for readability)
+        if (transcriptSegments.length === 0 || currentSpeaker !== lastLoggedSpeaker || isPause) {
+            shouldAddLabel = true;
+        }
+    }
 
-            const label = document.createElement('span');
-            label.className = `speaker-label ${currentSpeaker}`;
-            label.textContent = currentSpeaker === 'interviewer' ? 'Interviewer' : 'Respondent';
-            transcriptionFeed.appendChild(label);
-        } else if (transcriptSegments.length === 0) {
-            const label = document.createElement('span');
-            label.className = `speaker-label ${currentSpeaker}`;
-            label.textContent = currentSpeaker === 'interviewer' ? 'Interviewer' : 'Respondent';
-            transcriptionFeed.appendChild(label);
-        }
-    } else {
-        // Just a simple break if strictly required (though user asked for continuous transcript)
-        if (isSpeakerChangePrompt) {
+    if (shouldAddLabel) {
+        // If it's not the first segment, add a spacer break
+        if (transcriptSegments.length > 0) {
             const br = document.createElement('div');
             br.className = 'transcript-break';
             transcriptionFeed.appendChild(br);
         }
+
+        const label = document.createElement('span');
+        label.className = `speaker-label ${currentSpeaker}`;
+        label.textContent = currentSpeaker === 'interviewer' ? 'Interviewer' : 'Participant';
+        transcriptionFeed.appendChild(label);
+
+        lastLoggedSpeaker = currentSpeaker;
+    } else if (isPause && !speakerIdActive) {
+        // If IDs are off but there's a pause, just add a visual break
+        const br = document.createElement('div');
+        br.className = 'transcript-break';
+        transcriptionFeed.appendChild(br);
     }
 
     const timestamp = now - startTime;
@@ -1885,6 +1953,9 @@ function updateInterimDisplay(text) {
         interim.className = 'transcript-segment interim';
         // Removed opacity and italics for "instant appearance" feel
         transcriptionFeed.appendChild(interim);
+
+        // Allow immediate interaction by forcing commit
+        interim.addEventListener('mouseup', (e) => handleTextSelection(e, 'interimSegment'));
     }
     interim.textContent = (transcriptSegments.length > 0 ? ' ' : '') + text;
     transcriptionFeed.scrollTop = transcriptionFeed.scrollHeight;
@@ -1906,11 +1977,15 @@ function renderSegment(segment) {
 }
 
 function updateSegmentContent(el, segment) {
-    // Add leading space if not the start of a paragraph
+    // Add leading space if not the start of a paragraph OR after a speaker label
     // relies on el being in DOM
-    const isStartOfParagraph = el.previousElementSibling && el.previousElementSibling.className === 'transcript-break';
-    const isFirst = !el.previousElementSibling;
-    const needsSpace = !isFirst && !isStartOfParagraph;
+    const prev = el.previousElementSibling;
+    const isStartOfParagraph = prev && prev.className === 'transcript-break';
+    const isAfterLabel = prev && prev.classList.contains('speaker-label');
+    const isFirst = !prev;
+
+    // We do NOT want a space if it's the start of a paragraph, start of feed, OR directly after a speaker label
+    const needsSpace = !isFirst && !isStartOfParagraph && !isAfterLabel;
 
     let text = segment.text;
     const prefix = needsSpace ? ' ' : '';
@@ -1963,6 +2038,83 @@ function saveGeneralNote() {
 }
 
 function handleTextSelection(e, segmentId) {
+    // 1. Special Handling for Interim (Commit on Select)
+    if (segmentId === 'interimSegment') {
+        const selection = window.getSelection();
+        const rawText = selection.toString();
+        const selectedText = rawText.trim();
+        const interimEl = document.getElementById('interimSegment');
+
+        if (selectedText.length > 0 && interimEl) {
+            const fullInterimText = interimEl.textContent.trim();
+            const range = selection.getRangeAt(0);
+
+            // Calculate offset within the interim text
+            // We need to know where the selection started relative to the interim text content
+            let preCaretRange = range.cloneRange();
+            preCaretRange.selectNodeContents(interimEl);
+            preCaretRange.setEnd(range.startContainer, range.startOffset);
+            let startOffset = preCaretRange.toString().length;
+
+            // Adjust for leading space if interim has one (it often does if not first)
+            // addTranscriptSegment(text) trims the input.
+            // So if interim is " hello world", text becomes "hello world".
+            // If selection was "hello" (start index 1 in raw string), it should be start index 0 in trimmed string.
+            const hasLeadingSpace = interimEl.textContent.startsWith(' ');
+            if (hasLeadingSpace) {
+                startOffset = Math.max(0, startOffset - 1);
+            }
+
+            // Force Commit
+            // 1. Stop Recognition to prevent overwrite
+            if (recognition) recognition.abort();
+
+            // 2. Add as permanent segment
+            addTranscriptSegment(fullInterimText);
+
+            // 3. Find the new segment (last one)
+            const newSegment = transcriptSegments[transcriptSegments.length - 1];
+
+            // 4. Add Highlight to it
+            // We use the calculated offset. 
+            if (newSegment) {
+                if (!newSegment.highlights) newSegment.highlights = [];
+                newSegment.highlights.push({
+                    note: '', // Empty note for now, popdown will allow edit
+                    text: selectedText,
+                    start: startOffset,
+                    end: startOffset + selectedText.length
+                });
+
+                // Re-render to show highlight
+                const newEl = document.getElementById(newSegment.id);
+                if (newEl) updateSegmentContent(newEl, newSegment);
+
+                // Set global selection variables so the popdown works
+                selectedSegmentId = newSegment.id;
+                currentSelection = {
+                    text: selectedText,
+                    start: startOffset,
+                    end: startOffset + selectedText.length
+                };
+
+                // Show Popdown
+                const rect = range.getBoundingClientRect();
+                inlineNotePopdown.style.left = `${rect.left}px`;
+                inlineNotePopdown.style.top = `${rect.top - 50 + window.scrollY}px`;
+                inlineNotePopdown.classList.remove('hidden');
+                inlineNoteInput.focus();
+            }
+
+            // 5. Restart Recognition (new session)
+            if (isRecording) {
+                setTimeout(() => startTranscription(), 100);
+            }
+        }
+        return; // Stop normal processing
+    }
+
+    // Normal Logic for existing segments
     const selection = window.getSelection();
     const rawText = selection.toString();
     const selectedText = rawText.trim();
@@ -1997,9 +2149,11 @@ function handleTextSelection(e, segmentId) {
             const adjustedStartOffset = startOffset + (leadingSpaces > 0 ? leadingSpaces : 0);
 
             // Correct for the leading space if it exists in the element (prefix added by updateSegmentContent)
-            const isStartOfParagraph = segmentEl.previousElementSibling && segmentEl.previousElementSibling.className === 'transcript-break';
-            const firstInFeed = transcriptionFeed.firstChild === segmentEl;
-            const hasLeadingSpace = !firstInFeed && !isStartOfParagraph;
+            const prev = segmentEl.previousElementSibling;
+            const isStartOfParagraph = prev && prev.className === 'transcript-break';
+            const isAfterLabel = prev && prev.classList.contains('speaker-label');
+            const isFirst = !prev;
+            const hasLeadingSpace = !isFirst && !isStartOfParagraph && !isAfterLabel;
 
             // We subtract 1 if there's a system leading space, but clamp at 0
             const finalStart = Math.max(0, adjustedStartOffset - (hasLeadingSpace ? 1 : 0));

@@ -1294,6 +1294,29 @@ body.fullscreen-active #interviewDetailView {
     color: var(--text-muted);
 }
 
+.lang-select {
+    padding: 0.25rem 0.6rem;
+    border-radius: var(--radius-sm);
+    border: 1px solid #e2e8f0;
+    font-size: 0.8rem;
+    font-family: inherit;
+    color: var(--text-body);
+    background-color: white;
+    margin-left: 1rem;
+    outline: none;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.lang-select:hover {
+    border-color: var(--brand-primary);
+}
+
+.lang-select:focus {
+    border-color: var(--brand-primary);
+    box-shadow: 0 0 0 2px rgba(234, 88, 12, 0.1);
+}
+
 .switch {
     position: relative;
     display: inline-block;
@@ -1446,6 +1469,13 @@ input:checked+.slider:before {
 }
 
 /* Bottom Panel - Notes */
+/* Interim Text Styling (Pending) */
+.transcript-segment.interim {
+    color: var(--text-muted);
+    font-style: italic;
+    opacity: 0.8;
+}
+
 .notes-panel {
     background: var(--bg-white, #fff);
     border-radius: var(--radius-md);
