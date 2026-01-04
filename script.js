@@ -2518,35 +2518,164 @@ function getMergedTranscript(segments, notes) {
     return combined;
 }
 
+
+
+// Review Toolbar Controls
+const revToggleEdit = document.getElementById('revToggleEdit');
+const speakerLabelsContainer = document.getElementById('speakerLabelsContainer');
+const revAddNote = document.getElementById('revAddNote');
+const saveReviewBtn = document.getElementById('saveReviewBtn');
+
+let reviewEditMode = false;
+
+// Helper to toggle button active state
+function toggleButtonActive(button, isActive) {
+    if (isActive) {
+        button.style.background = '#f1f5f9';
+        button.style.color = 'var(--text-primary)';
+        button.style.borderColor = '#94a3b8';
+        button.style.fontWeight = '700';
+    } else {
+        button.style.background = '#ffffff';
+        button.style.color = 'var(--text-primary)';
+        button.style.borderColor = '#cbd5e1';
+        button.style.fontWeight = '600';
+    }
+}
+
+if (revToggleEdit) {
+    revToggleEdit.addEventListener('click', () => {
+        reviewEditMode = !reviewEditMode;
+        toggleButtonActive(revToggleEdit, reviewEditMode);
+        // Show/hide draggable speaker labels
+        if (speakerLabelsContainer) {
+            speakerLabelsContainer.style.display = reviewEditMode ? 'flex' : 'none';
+        }
+        renderReview();
+    });
+}
+
+if (revAddNote) {
+    revAddNote.addEventListener('click', () => {
+        const noteContent = prompt('Enter your note:');
+        if (noteContent && noteContent.trim()) {
+            const timestamp = Date.now() - (startTime || 0);
+            generalNotes.push({ content: noteContent.trim(), timestamp });
+            renderReview();
+            showToast('Note added');
+        }
+    });
+}
+
+if (saveReviewBtn) {
+    saveReviewBtn.onclick = saveReviewChanges;
+}
+
+// Drag and Drop functionality
+function initDragAndDrop() {
+    document.addEventListener('dragstart', (e) => {
+        if (e.target.classList.contains('draggable-label')) {
+            e.dataTransfer.setData('speaker', e.target.getAttribute('data-speaker'));
+            e.dataTransfer.effectAllowed = 'copy';
+        }
+    });
+
+    document.addEventListener('dragover', (e) => {
+        if (e.target.closest('.review-segment')) {
+            e.preventDefault();
+            e.dataTransfer.dropEffect = 'copy';
+            // Visual feedback
+            e.target.closest('.review-segment').style.background = '#fef3c7';
+        }
+    });
+
+    document.addEventListener('dragleave', (e) => {
+        if (e.target.closest('.review-segment')) {
+            e.target.closest('.review-segment').style.background = '';
+        }
+    });
+
+    document.addEventListener('drop', (e) => {
+        const segmentDiv = e.target.closest('.review-segment');
+        if (segmentDiv) {
+            e.preventDefault();
+            segmentDiv.style.background = '';
+
+            const speaker = e.dataTransfer.getData('speaker');
+            const segmentId = segmentDiv.getAttribute('data-segment-id');
+
+            // Find and update the segment
+            const segment = transcriptSegments.find(s => s.id === segmentId);
+            if (segment) {
+                segment.speaker = speaker;
+                renderReview();
+                showToast('Speaker label updated');
+            }
+        }
+    });
+}
+
+// Initialize drag and drop
+initDragAndDrop();
+
 function createReviewSegmentElement(segment) {
     const div = document.createElement('div');
     div.className = 'review-item review-segment';
+    div.setAttribute('data-segment-id', segment.id);
 
+    // In edit mode, make it a drop target
+    if (reviewEditMode) {
+        div.style.border = '2px dashed transparent';
+        div.style.transition = 'all 0.2s';
+        div.style.padding = '0.5rem';
+        div.style.marginBottom = '0.5rem';
+        div.style.borderRadius = '6px';
+    }
+
+    // Speaker Label
     if (segment.speaker) {
         const speakerLabel = document.createElement('span');
         speakerLabel.className = `speaker-label ${segment.speaker}`;
-        speakerLabel.textContent = segment.speaker === 'interviewer' ? 'Interviewer' : 'Participant';
-        speakerLabel.title = "Click to toggle speaker or remove";
-        speakerLabel.style.cursor = "pointer";
 
-        speakerLabel.onclick = () => {
-            if (segment.speaker === 'interviewer') {
-                segment.speaker = 'participant';
-                speakerLabel.className = 'speaker-label participant';
-                speakerLabel.textContent = 'Participant';
-            } else {
-                // Remove speaker
-                segment.speaker = null;
-                speakerLabel.remove();
-            }
-        };
+        if (reviewEditMode) {
+            // Add cross indicator for removal
+            speakerLabel.innerHTML = `${segment.speaker === 'interviewer' ? 'Interviewer' : 'Participant'} <span style="margin-left: 0.5rem; opacity: 0.6; font-size: 1.1em; cursor: pointer;">×</span>`;
+            speakerLabel.title = "Click × to remove";
+            speakerLabel.style.cursor = "default";
+
+            // Only the cross is clickable
+            speakerLabel.addEventListener('click', (e) => {
+                if (e.target.tagName === 'SPAN') {
+                    segment.speaker = null;
+                    renderReview();
+                }
+            });
+        } else {
+            speakerLabel.textContent = segment.speaker === 'interviewer' ? 'Interviewer' : 'Participant';
+        }
+
         div.appendChild(speakerLabel);
     }
 
     const textSpan = document.createElement('span');
-    textSpan.contentEditable = true;
+    textSpan.contentEditable = reviewEditMode;
     textSpan.spellcheck = false;
     textSpan.style.outline = 'none';
+    textSpan.style.whiteSpace = 'pre-wrap';
+
+    // Visual feedback for editable text
+    if (reviewEditMode) {
+        textSpan.style.borderBottom = '1px dashed #e2e8f0';
+        textSpan.style.cursor = 'text';
+        textSpan.style.display = 'block';
+        textSpan.style.marginTop = segment.speaker ? '0.5rem' : '0';
+    } else {
+        textSpan.style.cursor = 'default';
+        textSpan.title = "";
+        textSpan.style.borderBottom = 'none';
+        textSpan.onmouseover = null;
+        textSpan.onmouseout = null;
+    }
 
     let html = '';
     let lastIndex = 0;
@@ -2567,30 +2696,57 @@ function createReviewSegmentElement(segment) {
 
     textSpan.innerHTML = html;
 
-    // Add blur listener to save changes?
+    // Handle Enter key to create new paragraphs
+    if (reviewEditMode) {
+        textSpan.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                // Split segment at cursor position
+                const selection = window.getSelection();
+                const range = selection.getRangeAt(0);
+                const cursorOffset = range.startOffset;
+                const textNode = range.startContainer;
+
+                // Ensure we are editing within the textSpan's direct text content
+                if (textNode.parentNode === textSpan || textNode === textSpan) {
+                    const fullText = textSpan.innerText;
+                    const textBeforeCursor = fullText.substring(0, cursorOffset);
+                    const textAfterCursor = fullText.substring(cursorOffset);
+
+                    // Update current segment
+                    segment.text = textBeforeCursor.trim();
+
+                    // Create new segment
+                    const newSegment = {
+                        id: 'seg_' + Date.now(),
+                        text: textAfterCursor.trim(),
+                        timestamp: segment.timestamp + 1, // Assign a slightly later timestamp
+                        notes: [],
+                        speaker: null,
+                        highlights: []
+                    };
+
+                    // Insert after current segment
+                    const index = transcriptSegments.indexOf(segment);
+                    transcriptSegments.splice(index + 1, 0, newSegment);
+
+                    renderReview();
+                    showToast('Paragraph created');
+                }
+            }
+        });
+    }
+
     textSpan.addEventListener('blur', () => {
-        // Update segment text
-        segment.text = textSpan.innerText;
-        // Note: This logic is simple and might break highlights if text is heavily edited.
-        // But for "changing words or so", it works reasonably well as long as length is preserved or edits are minor.
-        // Highlights use indices, so shifting text blindly *will* break highlighting alignment.
-        // For a robust implementation, we'd need a real rich text editor model.
-        // Given the constraints, we accept this limitation or simply warn.
+        if (reviewEditMode) {
+            segment.text = textSpan.innerText;
+        }
     });
 
     div.appendChild(textSpan);
 
-    // Wire up highlights for this view too (tooltip)
-    // The existing mouseover listeners for .word-highlight are global (delegated)?
-    // No, they are usually attached in 'updateSegmentContent'? 
-    // Ah, 'initGlobalTooltip' in previous turn looked for '.word-highlight'.
-    // Let's check initGlobalTooltip logic.
-    // Use the same mouseover logic here.
-
     textSpan.querySelectorAll('.word-highlight').forEach(mark => {
-        // Rely on global tooltip delegation if it exists, OR add listeners here.
-        // script.js initGlobalTooltip uses document.addEventListener('mouseover') delegation?
-        // Let's check initGlobalTooltip.
+        // Tooltip delegation handles this.
     });
 
     return div;
