@@ -4,7 +4,10 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Contexture | Research Workspace</title>
+    <!-- PDF Generation Library -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+
+    <title>Contexture - AI Interview Companion</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -256,43 +259,56 @@
                     <div class="review-main-card"
                         style="flex: 2; background: white; border-radius: var(--radius-lg); border: 1px solid rgba(0,0,0,0.1); box-shadow: var(--shadow-card); display: flex; flex-direction: column; overflow: hidden;">
 
-                        <!-- NEW TOOLBAR -->
+                        <!-- REFINED TOOLBAR -->
                         <div class="review-toolbar"
                             style="padding: 1rem 1.5rem; background: #fafbfc; border-bottom: 1px solid rgba(0,0,0,0.08); display: flex; align-items: center; justify-content: space-between;">
                             <div class="toolbar-left" style="display: flex; gap: 1rem; align-items: center;">
 
-                                <button id="revToggleEdit" class="btn-secondary"
-                                    style="background: #ffffff; border: 1.5px solid #cbd5e1; color: var(--text-primary); display: flex; align-items: center; padding: 0.6rem 1.2rem; font-size: 0.95rem; font-weight: 600; border-radius: 8px; cursor: pointer; transition: all 0.2s; box-shadow: 0 1px 2px rgba(0,0,0,0.05);">
-                                    Edit Transcript
-                                </button>
+                                <!-- Mode Toggles -->
+                                <div
+                                    style="display: flex; background: #f1f5f9; padding: 0.25rem; border-radius: 10px; border: 1px solid #e2e8f0;">
+                                    <button id="revModeEdit"
+                                        style="border: none; background: transparent; padding: 0.5rem 1rem; font-size: 0.9rem; font-weight: 600; border-radius: 8px; cursor: pointer; transition: all 0.2s;">
+                                        Edit Transcript
+                                    </button>
+                                    <button id="revModeNotes"
+                                        style="border: none; background: transparent; padding: 0.5rem 1rem; font-size: 0.9rem; font-weight: 600; border-radius: 8px; cursor: pointer; transition: all 0.2s;">
+                                        Add Notes
+                                    </button>
+                                </div>
 
+                                <!-- Edit Mode Actions (Speaker Labels) -->
                                 <div id="speakerLabelsContainer"
-                                    style="display: none; gap: 0.5rem; align-items: center; margin-left: 1rem;">
+                                    style="display: none; gap: 0.4rem; align-items: center; margin-left: 0.5rem; padding-left: 1rem; border-left: 2px solid #e2e8f0;">
                                     <span
-                                        style="font-size: 0.85rem; color: var(--text-muted); margin-right: 0.5rem;">Drag
-                                        labels:</span>
+                                        style="font-size: 0.8rem; color: var(--text-muted); margin-right: 0.4rem;">Drag:</span>
                                     <div draggable="true" data-speaker="interviewer" class="draggable-label interviewer"
-                                        style="background: #f1f5f9; color: #64748b; padding: 0.4rem 0.9rem; border-radius: 4px; cursor: move; font-size: 0.75rem; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase;">
+                                        style="background: #f1f5f9; color: #64748b; padding: 0.3rem 0.7rem; border-radius: 4px; cursor: move; font-size: 0.7rem; font-weight: 700; text-transform: uppercase;">
                                         Interviewer
                                     </div>
                                     <div draggable="true" data-speaker="participant" class="draggable-label participant"
-                                        style="background: #1e40af; color: white; padding: 0.4rem 0.9rem; border-radius: 4px; cursor: move; font-size: 0.75rem; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase;">
+                                        style="background: #1e40af; color: white; padding: 0.3rem 0.7rem; border-radius: 4px; cursor: move; font-size: 0.7rem; font-weight: 700; text-transform: uppercase;">
                                         Participant
                                     </div>
                                 </div>
 
-                                <div style="width: 2px; height: 32px; background: rgba(0,0,0,0.1); margin: 0 0.5rem;">
+                                <!-- Notes Mode Actions -->
+                                <div id="notesActionsContainer"
+                                    style="display: none; margin-left: 0.5rem; padding-left: 1rem; border-left: 2px solid #e2e8f0;">
+                                    <button id="revActionAddNote" class="btn-secondary"
+                                        style="background: #ffffff; border: 1.5px solid #cbd5e1; color: var(--text-primary); padding: 0.5rem 1rem; font-size: 0.85rem; font-weight: 600; border-radius: 8px; cursor: pointer;">
+                                        + New Note
+                                    </button>
                                 </div>
-
-                                <button id="revAddNote" class="btn-secondary"
-                                    style="background: #ffffff; border: 1.5px solid #cbd5e1; color: var(--text-muted); display: flex; align-items: center; padding: 0.6rem 1.2rem; font-size: 0.95rem; font-weight: 500; border-radius: 8px; cursor: pointer; transition: all 0.2s; box-shadow: 0 1px 2px rgba(0,0,0,0.05);">
-                                    Add Note
-                                </button>
                             </div>
 
-                            <div class="toolbar-right">
+                            <div class="toolbar-right" style="display: flex; gap: 0.75rem;">
+                                <button id="downloadReviewBtn" class="btn-secondary"
+                                    style="background: #ffffff; border: 1.5px solid #cbd5e1; color: var(--text-primary); padding: 0.6rem 1.2rem; font-size: 0.9rem; font-weight: 600; border-radius: 8px; cursor: pointer;">
+                                    Download
+                                </button>
                                 <button id="saveReviewBtn" class="btn-primary"
-                                    style="font-size: 0.95rem; padding: 0.6rem 1.5rem; font-weight: 600; box-shadow: 0 2px 4px rgba(239, 68, 68, 0.2);">
+                                    style="font-size: 0.9rem; padding: 0.6rem 1.5rem; font-weight: 600; box-shadow: 0 2px 4px rgba(239, 68, 68, 0.2);">
                                     Save Changes
                                 </button>
                             </div>

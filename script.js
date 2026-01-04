@@ -2521,42 +2521,138 @@ function getMergedTranscript(segments, notes) {
 
 
 // Review Toolbar Controls
-const revToggleEdit = document.getElementById('revToggleEdit');
+const revModeEdit = document.getElementById('revModeEdit');
+const revModeNotes = document.getElementById('revModeNotes');
 const speakerLabelsContainer = document.getElementById('speakerLabelsContainer');
-const revAddNote = document.getElementById('revAddNote');
+const notesActionsContainer = document.getElementById('notesActionsContainer');
+const revActionAddNote = document.getElementById('revActionAddNote');
+const downloadReviewBtn = document.getElementById('downloadReviewBtn');
 const saveReviewBtn = document.getElementById('saveReviewBtn');
 
 let reviewEditMode = false;
+let reviewNotesMode = false;
 
-// Helper to toggle button active state
-function toggleButtonActive(button, isActive) {
-    if (isActive) {
-        button.style.background = '#f1f5f9';
-        button.style.color = 'var(--text-primary)';
-        button.style.borderColor = '#94a3b8';
-        button.style.fontWeight = '700';
-    } else {
-        button.style.background = '#ffffff';
-        button.style.color = 'var(--text-primary)';
-        button.style.borderColor = '#cbd5e1';
-        button.style.fontWeight = '600';
+// PDF Export Function
+async function downloadTranscriptAsPDF() {
+    const element = document.getElementById('reviewFeed');
+    if (!element) return;
+
+    // Show loading state
+    const originalText = downloadReviewBtn.textContent;
+    downloadReviewBtn.textContent = 'Generating...';
+    downloadReviewBtn.disabled = true;
+
+    // Store original modes to restore later
+    const wasEditMode = reviewEditMode;
+    const wasNotesMode = reviewNotesMode;
+
+    // Turn off edit/note modes for a clean export
+    reviewEditMode = false;
+    reviewNotesMode = false;
+    updateToolbarModes();
+    renderReview();
+
+    try {
+        const sessionTitle = document.getElementById('reviewProjectName')?.textContent || 'Interview-Transcript';
+        const opt = {
+            margin: [15, 15],
+            filename: `${sessionTitle.replace(/\s+/g, '-').toLowerCase()}-${Date.now()}.pdf`,
+            image: { type: 'jpeg', quality: 0.98 },
+            html2canvas: { scale: 2, useCORS: true, letterRendering: true },
+            jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
+            pagebreak: { mode: ['avoid-all', 'css', 'legacy'] }
+        };
+
+        // Add a header for the PDF
+        const headerHtml = `
+            <div style="font-family: Inter, sans-serif; padding-bottom: 20px; border-bottom: 2px solid #eee; margin-bottom: 30px;">
+                <h1 style="color: #1a202c; margin: 0; font-size: 24px;">${sessionTitle}</h1>
+                <p style="color: #718096; margin: 5px 0 0 0; font-size: 14px;">Transcript Exported from Contexture</p>
+            </div>
+        `;
+
+        // Create a clone for the PDF to add the header without affecting the real UI
+        const container = document.createElement('div');
+        container.innerHTML = headerHtml;
+
+        // Clone the feed content
+        const feedClone = element.cloneNode(true);
+        // Ensure white background for PDF
+        feedClone.style.background = 'white';
+        feedClone.style.padding = '0';
+
+        // Remove interactive elements from clone
+        feedClone.querySelectorAll('.delete-segment-btn, .review-action-btn').forEach(el => el.remove());
+
+        container.appendChild(feedClone);
+
+        // Run html2pdf
+        await html2pdf().set(opt).from(container).save();
+        showToast('PDF downloaded successfully');
+    } catch (error) {
+        console.error('PDF Generation Error:', error);
+        alert('Failed to generate PDF. Please try again.');
+    } finally {
+        // Restore UI
+        reviewEditMode = wasEditMode;
+        reviewNotesMode = wasNotesMode;
+        updateToolbarModes();
+        renderReview();
+
+        downloadReviewBtn.textContent = originalText;
+        downloadReviewBtn.disabled = false;
     }
 }
 
-if (revToggleEdit) {
-    revToggleEdit.addEventListener('click', () => {
+// Helper to toggle button active style within the grouped toggle
+function updateToolbarModes() {
+    // Edit mode visual
+    if (reviewEditMode) {
+        revModeEdit.style.background = '#ffffff';
+        revModeEdit.style.boxShadow = '0 1px 3px rgba(0,0,0,0.1)';
+        revModeEdit.style.color = 'var(--brand-primary)';
+    } else {
+        revModeEdit.style.background = 'transparent';
+        revModeEdit.style.boxShadow = 'none';
+        revModeEdit.style.color = 'var(--text-muted)';
+    }
+
+    // Notes mode visual
+    if (reviewNotesMode) {
+        revModeNotes.style.background = '#ffffff';
+        revModeNotes.style.boxShadow = '0 1px 3px rgba(0,0,0,0.1)';
+        revModeNotes.style.color = 'var(--brand-primary)';
+    } else {
+        revModeNotes.style.background = 'transparent';
+        revModeNotes.style.boxShadow = 'none';
+        revModeNotes.style.color = 'var(--text-muted)';
+    }
+
+    // Show/Hide sub-actions
+    if (speakerLabelsContainer) speakerLabelsContainer.style.display = reviewEditMode ? 'flex' : 'none';
+    if (notesActionsContainer) notesActionsContainer.style.display = reviewNotesMode ? 'block' : 'none';
+}
+
+if (revModeEdit) {
+    revModeEdit.addEventListener('click', () => {
         reviewEditMode = !reviewEditMode;
-        toggleButtonActive(revToggleEdit, reviewEditMode);
-        // Show/hide draggable speaker labels
-        if (speakerLabelsContainer) {
-            speakerLabelsContainer.style.display = reviewEditMode ? 'flex' : 'none';
-        }
+        if (reviewEditMode) reviewNotesMode = false; // Mutually exclusive
+        updateToolbarModes();
         renderReview();
     });
 }
 
-if (revAddNote) {
-    revAddNote.addEventListener('click', () => {
+if (revModeNotes) {
+    revModeNotes.addEventListener('click', () => {
+        reviewNotesMode = !reviewNotesMode;
+        if (reviewNotesMode) reviewEditMode = false; // Mutually exclusive
+        updateToolbarModes();
+        renderReview();
+    });
+}
+
+if (revActionAddNote) {
+    revActionAddNote.addEventListener('click', () => {
         const noteContent = prompt('Enter your note:');
         if (noteContent && noteContent.trim()) {
             const timestamp = Date.now() - (startTime || 0);
@@ -2566,6 +2662,13 @@ if (revAddNote) {
         }
     });
 }
+
+if (downloadReviewBtn) {
+    downloadReviewBtn.addEventListener('click', downloadTranscriptAsPDF);
+}
+
+// Initial state call
+updateToolbarModes();
 
 if (saveReviewBtn) {
     saveReviewBtn.onclick = saveReviewChanges;
@@ -2623,23 +2726,32 @@ function createReviewSegmentElement(segment) {
     div.className = 'review-item review-segment';
     div.setAttribute('data-segment-id', segment.id);
 
-    // In edit mode, make it a drop target
+    // Use flex for horizontal alignment and vertical centering
+    div.style.display = 'flex';
+    div.style.alignItems = 'center'; // Center the badge with the text
+    div.style.gap = '0.75rem';
+    div.style.marginBottom = '1rem';
+
+    // In edit mode, add visual boundaries
     if (reviewEditMode) {
-        div.style.border = '2px dashed transparent';
-        div.style.transition = 'all 0.2s';
         div.style.padding = '0.5rem';
-        div.style.marginBottom = '0.5rem';
-        div.style.borderRadius = '6px';
+        div.style.borderRadius = '8px';
+        div.style.transition = 'background-color 0.2s';
     }
 
     // Speaker Label
     if (segment.speaker) {
         const speakerLabel = document.createElement('span');
         speakerLabel.className = `speaker-label ${segment.speaker}`;
+        speakerLabel.style.display = 'inline-flex';
+        speakerLabel.style.alignItems = 'center';
+        speakerLabel.style.justifyContent = 'center';
+        speakerLabel.style.lineHeight = '1';
+        speakerLabel.style.flexShrink = '0'; // Don't squash the badge
 
         if (reviewEditMode) {
             // Add cross indicator for removal
-            speakerLabel.innerHTML = `${segment.speaker === 'interviewer' ? 'Interviewer' : 'Participant'} <span style="margin-left: 0.5rem; opacity: 0.6; font-size: 1.1em; cursor: pointer;">×</span>`;
+            speakerLabel.innerHTML = `${segment.speaker === 'interviewer' ? 'Interviewer' : 'Participant'} <span style="margin-left: 0.5rem; opacity: 0.6; font-size: 1.1em; cursor: pointer; line-height: 1;">×</span>`;
             speakerLabel.title = "Click × to remove";
             speakerLabel.style.cursor = "default";
 
@@ -2662,13 +2774,13 @@ function createReviewSegmentElement(segment) {
     textSpan.spellcheck = false;
     textSpan.style.outline = 'none';
     textSpan.style.whiteSpace = 'pre-wrap';
+    textSpan.style.flex = '1'; // Take up remaining space
+    textSpan.style.lineHeight = '1.6';
 
     // Visual feedback for editable text
     if (reviewEditMode) {
         textSpan.style.borderBottom = '1px dashed #e2e8f0';
         textSpan.style.cursor = 'text';
-        textSpan.style.display = 'block';
-        textSpan.style.marginTop = segment.speaker ? '0.5rem' : '0';
     } else {
         textSpan.style.cursor = 'default';
         textSpan.title = "";
