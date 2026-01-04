@@ -83,8 +83,11 @@ let isPaused = false;
 let startTime = null;
 let timerInterval = null;
 let recognition = null;
-let transcriptSegments = []; // { id, text, timestamp, notes: [] }
+let transcriptSegments = []; // { id, text, timestamp, notes: [], speaker: 'interviewer'|'respondent' }
 let currentSegment = null;
+let lastSegmentEndTime = null;
+let currentSpeaker = 'interviewer';
+let speakerIdActive = true;
 let generalNotes = []; // { content, timestamp }
 let selectedSegmentId = null; // For inline notes
 
@@ -196,6 +199,8 @@ let currentTranscriptionLanguage = 'de-DE'; // Default to German, can be empty f
 
 const startRecordingBtn = document.getElementById('startRecordingBtn');
 const stopRecordingBtn = document.getElementById('stopRecordingBtn');
+const switchSpeakerBtn = document.getElementById('switchSpeakerBtn');
+const speakerIdActiveToggle = document.getElementById('speakerIdActiveToggle');
 
 const generalNotesTextarea = document.getElementById('generalNotesTextarea');
 const submitGeneralNoteBtn = document.getElementById('submitGeneralNoteBtn');
@@ -1399,11 +1404,22 @@ async function loadInterviewView(interviewId) {
     interviewDetailView.classList.remove('hidden');
 
     interviewDetailTitle.textContent = 'Loading...';
-    transcriptionFeed.innerHTML = '<p style="text-align: center; color: var(--text-muted); margin-top: 2rem;">Click the red button to start the interview transcription.</p>';
+    transcriptionFeed.innerHTML = '<p style="text-align: center; color: var(--text-muted); margin-top: 2rem;">Click the green button to start the interview transcription.</p>';
     recordingTimer.textContent = '00:00';
     recordingStatus.textContent = 'Ready';
     transcriptSegments = [];
     generalNotes = [];
+    lastSegmentEndTime = null;
+    currentSpeaker = 'interviewer';
+    speakerIdActive = true;
+    if (speakerIdActiveToggle) speakerIdActiveToggle.checked = true;
+    if (switchSpeakerBtn) {
+        switchSpeakerBtn.disabled = true;
+        switchSpeakerBtn.querySelector('span').textContent = 'Interviewer';
+        switchSpeakerBtn.classList.add('btn-secondary');
+        switchSpeakerBtn.style.background = '';
+        switchSpeakerBtn.style.color = '';
+    }
 
     // Reset UI State
     if (startRecordingBtn) {
@@ -1501,6 +1517,32 @@ function initInterviewListeners() {
     }
     if (stopRecordingBtn) stopRecordingBtn.addEventListener('click', stopInterview);
 
+    if (switchSpeakerBtn) {
+        switchSpeakerBtn.addEventListener('click', toggleSpeaker);
+    }
+
+    if (speakerIdActiveToggle) {
+        speakerIdActiveToggle.addEventListener('change', (e) => {
+            speakerIdActive = e.target.checked;
+            if (speakerIdActive) {
+                switchSpeakerBtn.style.opacity = '1';
+                // Only enable the button if we are actually recording
+                if (isRecording) switchSpeakerBtn.disabled = false;
+            } else {
+                switchSpeakerBtn.style.opacity = '0.5';
+                switchSpeakerBtn.disabled = true;
+            }
+        });
+    }
+
+    // Key shortcut: Tab to switch speaker
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Tab' && isRecording && !isPaused) {
+            e.preventDefault();
+            toggleSpeaker();
+        }
+    });
+
     if (submitGeneralNoteBtn) submitGeneralNoteBtn.addEventListener('click', saveGeneralNote);
     if (generalNotesTextarea) {
         generalNotesTextarea.addEventListener('keydown', (e) => {
@@ -1545,11 +1587,43 @@ function startInterview() {
     `;
 
     stopRecordingBtn.disabled = false;
+    if (switchSpeakerBtn) {
+        switchSpeakerBtn.disabled = !speakerIdActive;
+        switchSpeakerBtn.style.opacity = speakerIdActive ? '1' : '0.5';
+    }
     recordingStatus.textContent = 'Recording...';
     recordingStatus.parentElement.classList.add('active');
 
     startTimer();
     startTranscription();
+}
+
+function toggleSpeaker() {
+    currentSpeaker = (currentSpeaker === 'interviewer') ? 'respondent' : 'interviewer';
+    if (switchSpeakerBtn) {
+        switchSpeakerBtn.querySelector('span').textContent = currentSpeaker.charAt(0).toUpperCase() + currentSpeaker.slice(1);
+        if (currentSpeaker === 'respondent') {
+            switchSpeakerBtn.classList.remove('btn-secondary');
+            switchSpeakerBtn.style.color = '#fff';
+            switchSpeakerBtn.style.background = '#1e40af'; // respondent blue
+        } else {
+            switchSpeakerBtn.classList.add('btn-secondary');
+            switchSpeakerBtn.style.background = '';
+            switchSpeakerBtn.style.color = '';
+        }
+    }
+
+    // Only add visual break/label if speaker ID is active
+    if (speakerIdActive) {
+        const br = document.createElement('div');
+        br.className = 'transcript-break';
+        transcriptionFeed.appendChild(br);
+
+        const label = document.createElement('span');
+        label.className = `speaker-label ${currentSpeaker}`;
+        label.textContent = currentSpeaker === 'interviewer' ? 'Interviewer' : 'Respondent';
+        transcriptionFeed.appendChild(label);
+    }
 }
 
 function pauseInterview() {
@@ -1734,9 +1808,39 @@ function stopTranscription() {
 function addTranscriptSegment(text) {
     if (!text.trim()) return;
 
-    const timestamp = Date.now() - startTime;
-    const id = 'seg_' + Date.now();
-    const segment = { id, text, timestamp, notes: [] };
+    const now = Date.now();
+    const pauseThreshold = 3000; // 3 seconds silence = new line
+
+    const isSpeakerChangePrompt = lastSegmentEndTime && (now - lastSegmentEndTime > pauseThreshold);
+
+    if (speakerIdActive) {
+        if (isSpeakerChangePrompt) {
+            const br = document.createElement('div');
+            br.className = 'transcript-break';
+            transcriptionFeed.appendChild(br);
+
+            const label = document.createElement('span');
+            label.className = `speaker-label ${currentSpeaker}`;
+            label.textContent = currentSpeaker === 'interviewer' ? 'Interviewer' : 'Respondent';
+            transcriptionFeed.appendChild(label);
+        } else if (transcriptSegments.length === 0) {
+            const label = document.createElement('span');
+            label.className = `speaker-label ${currentSpeaker}`;
+            label.textContent = currentSpeaker === 'interviewer' ? 'Interviewer' : 'Respondent';
+            transcriptionFeed.appendChild(label);
+        }
+    } else {
+        // Just a simple break if strictly required (though user asked for continuous transcript)
+        if (isSpeakerChangePrompt) {
+            const br = document.createElement('div');
+            br.className = 'transcript-break';
+            transcriptionFeed.appendChild(br);
+        }
+    }
+
+    const timestamp = now - startTime;
+    const id = 'seg_' + now;
+    const segment = { id, text, timestamp, notes: [], speaker: currentSpeaker };
     transcriptSegments.push(segment);
 
     // Remove interim
@@ -1744,6 +1848,7 @@ function addTranscriptSegment(text) {
     if (interim) interim.remove();
 
     renderSegment(segment);
+    lastSegmentEndTime = now;
 }
 
 function updateInterimDisplay(text) {
@@ -1751,22 +1856,25 @@ function updateInterimDisplay(text) {
 
     let interim = document.getElementById('interimSegment');
     if (!interim) {
-        interim = document.createElement('div');
+        interim = document.createElement('span');
         interim.id = 'interimSegment';
         interim.className = 'transcript-segment';
-        interim.style.opacity = '0.6';
+        interim.style.opacity = '0.5';
         interim.style.fontStyle = 'italic';
         transcriptionFeed.appendChild(interim);
     }
-    interim.textContent = text;
+    interim.textContent = (transcriptSegments.length > 0 ? ' ' : '') + text;
     transcriptionFeed.scrollTop = transcriptionFeed.scrollHeight;
 }
 
 function renderSegment(segment) {
-    const el = document.createElement('div');
+    const el = document.createElement('span');
     el.className = 'transcript-segment';
     el.id = segment.id;
-    el.textContent = segment.text;
+    // Add leading space if not the start of a paragraph
+    const isStartOfParagraph = transcriptionFeed.lastElementChild && transcriptionFeed.lastElementChild.className === 'transcript-break';
+    const needsSpace = transcriptSegments.length > 1 && !isStartOfParagraph;
+    el.textContent = (needsSpace ? ' ' : '') + segment.text;
 
     el.addEventListener('mouseup', (e) => handleTextSelection(e, segment.id));
 
