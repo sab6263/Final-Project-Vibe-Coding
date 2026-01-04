@@ -2368,13 +2368,9 @@ function deleteInlineNote(segmentId, startOffset) {
     const index = segment.highlights.findIndex(h => h.start == startOffset);
     if (index > -1) {
         segment.highlights.splice(index, 1);
-
-        // Re-render
-        const el = document.getElementById(segmentId);
-        if (el) {
-            updateSegmentContent(el, segment);
-            showToast('Note removed');
-        }
+        pushToReviewHistory();
+        renderReview();
+        showToast('Note removed');
     }
 }
 
@@ -2416,8 +2412,15 @@ function openReview(interviewId) {
         reviewTitle.textContent = "Review: " + interviewDetailTitle.textContent;
     }
 
-    // Merge and Render
+    // Reset History for new session
+    reviewHistoryStack = [];
+    reviewRedoStack = [];
+
+    // Merge and Render first so we have accurate data
     renderReview();
+
+    // Initial state push (State 0)
+    pushToReviewHistory();
 }
 
 function renderReview() {
@@ -2528,9 +2531,65 @@ const notesActionsContainer = document.getElementById('notesActionsContainer');
 const revActionAddNote = document.getElementById('revActionAddNote');
 const downloadReviewBtn = document.getElementById('downloadReviewBtn');
 const saveReviewBtn = document.getElementById('saveReviewBtn');
+const revUndoBtn = document.getElementById('revUndoBtn');
+const revRedoBtn = document.getElementById('revRedoBtn');
 
-let reviewEditMode = false;
+let reviewEditMode = true;
 let reviewNotesMode = false;
+
+// Undo/Redo Stacks
+let reviewHistoryStack = [];
+let reviewRedoStack = [];
+const MAX_HISTORY = 50;
+
+function pushToReviewHistory() {
+    // Save a deep clone of current state
+    const state = {
+        transcript: JSON.parse(JSON.stringify(transcriptSegments)),
+        notes: JSON.parse(JSON.stringify(generalNotes))
+    };
+
+    // Don't push if it's identical to the last state in the stack
+    if (reviewHistoryStack.length > 0) {
+        const last = reviewHistoryStack[reviewHistoryStack.length - 1];
+        if (JSON.stringify(last) === JSON.stringify(state)) return;
+    }
+
+    reviewHistoryStack.push(state);
+    if (reviewHistoryStack.length > MAX_HISTORY) reviewHistoryStack.shift();
+
+    // Refresh UI to update Undo/Redo button states
+    updateToolbarModes();
+}
+
+function undoReview() {
+    if (reviewHistoryStack.length <= 1) return; // Need at least one state to revert to, plus current
+
+    // Current state goes to redo stack
+    const currentState = reviewHistoryStack.pop();
+    reviewRedoStack.push(currentState);
+
+    // Revert to previous
+    const prevState = reviewHistoryStack[reviewHistoryStack.length - 1];
+    transcriptSegments = JSON.parse(JSON.stringify(prevState.transcript));
+    generalNotes = JSON.parse(JSON.stringify(prevState.notes));
+
+    renderReview();
+    updateToolbarModes();
+}
+
+function redoReview() {
+    if (reviewRedoStack.length === 0) return;
+
+    const nextState = reviewRedoStack.pop();
+    reviewHistoryStack.push(nextState);
+
+    transcriptSegments = JSON.parse(JSON.stringify(nextState.transcript));
+    generalNotes = JSON.parse(JSON.stringify(nextState.notes));
+
+    renderReview();
+    updateToolbarModes();
+}
 
 // PDF Export Function
 async function downloadTranscriptAsPDF() {
@@ -2631,6 +2690,24 @@ function updateToolbarModes() {
     // Show/Hide sub-actions
     if (speakerLabelsContainer) speakerLabelsContainer.style.display = reviewEditMode ? 'flex' : 'none';
     if (notesActionsContainer) notesActionsContainer.style.display = reviewNotesMode ? 'block' : 'none';
+
+    // Undo/Redo Button Visuals
+    if (revUndoBtn) {
+        const canUndo = reviewHistoryStack.length > 1;
+        revUndoBtn.style.opacity = canUndo ? '1' : '0.5';
+        revUndoBtn.style.pointerEvents = canUndo ? 'auto' : 'none';
+        revUndoBtn.style.background = canUndo ? '#fff' : '#f8fafc';
+        revUndoBtn.style.borderColor = canUndo ? '#cbd5e1' : '#e2e8f0';
+        revUndoBtn.style.color = canUndo ? '#1e293b' : '#94a3b8';
+    }
+    if (revRedoBtn) {
+        const canRedo = reviewRedoStack.length > 0;
+        revRedoBtn.style.opacity = canRedo ? '1' : '0.5';
+        revRedoBtn.style.pointerEvents = canRedo ? 'auto' : 'none';
+        revRedoBtn.style.background = canRedo ? '#fff' : '#f8fafc';
+        revRedoBtn.style.borderColor = canRedo ? '#cbd5e1' : '#e2e8f0';
+        revRedoBtn.style.color = canRedo ? '#1e293b' : '#94a3b8';
+    }
 }
 
 if (revModeEdit) {
@@ -2657,6 +2734,8 @@ if (revActionAddNote) {
         if (noteContent && noteContent.trim()) {
             const timestamp = Date.now() - (startTime || 0);
             generalNotes.push({ content: noteContent.trim(), timestamp });
+            reviewRedoStack = []; // Clear redo on action
+            pushToReviewHistory();
             renderReview();
             showToast('Note added');
         }
@@ -2667,8 +2746,22 @@ if (downloadReviewBtn) {
     downloadReviewBtn.addEventListener('click', downloadTranscriptAsPDF);
 }
 
-// Initial state call
-updateToolbarModes();
+if (revUndoBtn) revUndoBtn.addEventListener('click', undoReview);
+if (revRedoBtn) revRedoBtn.addEventListener('click', redoReview);
+
+// Global shortcuts for undo/redo in review
+document.addEventListener('keydown', (e) => {
+    if (transcriptReviewView && !transcriptReviewView.classList.contains('hidden')) {
+        if ((e.ctrlKey || e.metaKey) && e.key === 'z') {
+            e.preventDefault();
+            undoReview();
+        }
+        if ((e.ctrlKey || e.metaKey) && e.key === 'y') {
+            e.preventDefault();
+            redoReview();
+        }
+    }
+});
 
 if (saveReviewBtn) {
     saveReviewBtn.onclick = saveReviewChanges;
@@ -2709,8 +2802,10 @@ function initDragAndDrop() {
 
             // Find and update the segment
             const segment = transcriptSegments.find(s => s.id === segmentId);
-            if (segment) {
+            if (segment && segment.speaker !== speaker) {
                 segment.speaker = speaker;
+                reviewRedoStack = []; // Clear redo on action
+                pushToReviewHistory();
                 renderReview();
                 showToast('Speaker label updated');
             }
@@ -2759,6 +2854,8 @@ function createReviewSegmentElement(segment) {
             speakerLabel.addEventListener('click', (e) => {
                 if (e.target.tagName === 'SPAN') {
                     segment.speaker = null;
+                    reviewRedoStack = []; // Clear redo on action
+                    pushToReviewHistory();
                     renderReview();
                 }
             });
@@ -2784,9 +2881,9 @@ function createReviewSegmentElement(segment) {
     } else {
         textSpan.style.cursor = 'default';
         textSpan.title = "";
-        textSpan.style.borderBottom = 'none';
         textSpan.onmouseover = null;
         textSpan.onmouseout = null;
+        textSpan.style.borderBottom = 'none';
     }
 
     let html = '';
@@ -2813,52 +2910,125 @@ function createReviewSegmentElement(segment) {
         textSpan.addEventListener('keydown', (e) => {
             if (e.key === 'Enter' && !e.shiftKey) {
                 e.preventDefault();
-                // Split segment at cursor position
-                const selection = window.getSelection();
-                const range = selection.getRangeAt(0);
-                const cursorOffset = range.startOffset;
-                const textNode = range.startContainer;
 
-                // Ensure we are editing within the textSpan's direct text content
-                if (textNode.parentNode === textSpan || textNode === textSpan) {
-                    const fullText = textSpan.innerText;
-                    const textBeforeCursor = fullText.substring(0, cursorOffset);
-                    const textAfterCursor = fullText.substring(cursorOffset);
+                // Get global cursor position within the element
+                const selection = window.getSelection();
+                if (selection.rangeCount > 0) {
+                    const range = selection.getRangeAt(0);
+                    const preCaretRange = range.cloneRange();
+                    preCaretRange.selectNodeContents(textSpan);
+                    preCaretRange.setEnd(range.startContainer, range.startOffset);
+                    const globalOffset = preCaretRange.toString().length;
 
                     // Update current segment
+                    textSpan._isSplitting = true; // Prevent blur from overwriting
+
+                    const fullText = textSpan.innerText;
+                    const textBeforeCursor = fullText.substring(0, globalOffset);
+                    const textAfterCursor = fullText.substring(globalOffset);
+
+                    // Re-distribute highlights
+                    const highlightsBefore = [];
+                    const highlightsAfter = [];
+
+                    if (segment.highlights) {
+                        segment.highlights.forEach(h => {
+                            if (h.end <= globalOffset) {
+                                // Entirely before the split
+                                highlightsBefore.push(h);
+                            } else if (h.start >= globalOffset) {
+                                // Entirely after the split - adjust offset
+                                highlightsAfter.push({
+                                    ...h,
+                                    start: h.start - globalOffset,
+                                    end: h.end - globalOffset
+                                });
+                            }
+                            // Note: Highlights that are intersected by the split are currently lost 
+                            // to prevent breaking the DOM structure of the split text.
+                        });
+                    }
+
                     segment.text = textBeforeCursor.trim();
+                    segment.highlights = highlightsBefore;
 
                     // Create new segment
                     const newSegment = {
                         id: 'seg_' + Date.now(),
                         text: textAfterCursor.trim(),
-                        timestamp: segment.timestamp + 1, // Assign a slightly later timestamp
+                        timestamp: segment.timestamp + 1,
                         notes: [],
                         speaker: null,
-                        highlights: []
+                        highlights: highlightsAfter
                     };
 
                     // Insert after current segment
                     const index = transcriptSegments.indexOf(segment);
                     transcriptSegments.splice(index + 1, 0, newSegment);
 
+                    reviewRedoStack = [];
+                    pushToReviewHistory();
                     renderReview();
-                    showToast('Paragraph created');
+
+                    // Focus the new segment
+                    setTimeout(() => {
+                        const newEl = document.querySelector(`[data-segment-id="${newSegment.id}"] span[contenteditable="true"]`);
+                        if (newEl) {
+                            newEl.focus();
+                            const newRange = document.createRange();
+                            const newSel = window.getSelection();
+                            newRange.setStart(newEl.childNodes[0] || newEl, 0);
+                            newRange.collapse(true);
+                            newSel.removeAllRanges();
+                            newSel.addRange(newRange);
+                        }
+                    }, 10);
+
+                    showToast('Paragraph split');
                 }
             }
         });
     }
 
     textSpan.addEventListener('blur', () => {
+        // If we are currently splitting this segment, ignore the blur event
+        // which triggers when the element is removed from the DOM by renderReview()
+        if (textSpan._isSplitting) return;
+
         if (reviewEditMode) {
-            segment.text = textSpan.innerText;
+            const currentText = textSpan.innerText;
+            if (segment.text !== currentText) {
+                segment.text = currentText;
+                reviewRedoStack = []; // Clear redo on action
+                pushToReviewHistory();
+                updateToolbarModes(); // Ensure Undo button state updates
+            }
         }
     });
 
     div.appendChild(textSpan);
 
     textSpan.querySelectorAll('.word-highlight').forEach(mark => {
-        // Tooltip delegation handles this.
+        mark.title = "Right-click to remove note";
+        mark.style.cursor = "help";
+
+        // Allow removal on click when in edit/notes mode
+        mark.addEventListener('click', (e) => {
+            if (reviewEditMode || reviewNotesMode) {
+                e.preventDefault();
+                e.stopPropagation();
+
+                const start = mark.getAttribute('data-highlight-start');
+                const segId = mark.getAttribute('data-segment-id');
+
+                openConfirmModal(
+                    'Remove Note',
+                    'Are you sure you want to remove this highlight and note?',
+                    'Remove',
+                    () => deleteInlineNote(segId, start)
+                );
+            }
+        });
     });
 
     return div;

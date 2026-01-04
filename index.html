@@ -277,6 +277,29 @@
                                     </button>
                                 </div>
 
+                                <!-- Undo/Redo -->
+                                <div
+                                    style="display: flex; gap: 0.5rem; margin-left: 0.5rem; padding-left: 0.5rem; border-left: 1px solid #e2e8f0;">
+                                    <button id="revUndoBtn" title="Undo (Ctrl+Z)"
+                                        style="border: 1px solid #cbd5e1; background: white; padding: 0.4rem 0.6rem; border-radius: 6px; cursor: pointer; display: flex; align-items: center; justify-content: center; opacity: 0.5;">
+                                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none"
+                                            stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                                            stroke-linejoin="round">
+                                            <path d="M3 7v6h6"></path>
+                                            <path d="M21 17a9 9 0 0 0-9-9 9 9 0 0 0-6 2.3L3 13"></path>
+                                        </svg>
+                                    </button>
+                                    <button id="revRedoBtn" title="Redo (Ctrl+Y)"
+                                        style="border: 1px solid #cbd5e1; background: white; padding: 0.4rem 0.6rem; border-radius: 6px; cursor: pointer; display: flex; align-items: center; justify-content: center; opacity: 0.5;">
+                                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none"
+                                            stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                                            stroke-linejoin="round">
+                                            <path d="M21 7v6h-6"></path>
+                                            <path d="M3 17a9 9 0 0 1 9-9 9 9 0 0 1 6 2.3L21 13"></path>
+                                        </svg>
+                                    </button>
+                                </div>
+
                                 <!-- Edit Mode Actions (Speaker Labels) -->
                                 <div id="speakerLabelsContainer"
                                     style="display: none; gap: 0.4rem; align-items: center; margin-left: 0.5rem; padding-left: 1rem; border-left: 2px solid #e2e8f0;">
