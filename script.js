@@ -676,8 +676,19 @@ function formatDate(date) {
 }
 
 function escapeHtml(text) {
-    return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
+    if (!text) return '';
+    return text.toString().replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
 }
+
+function cleanQuestionText(text) {
+    if (!text) return '';
+    // Remove leading bullet points, dashes, and following spaces
+    return text.trim().replace(/^[•\-\–\—\*·◦▪▫\u2022\u2023\u25E6\u2043\u2219]\s*/, '');
+}
+
+window.toggleGuidelineQuestion = function (el) {
+    el.classList.toggle('is-completed');
+};
 
 function showToast(message) {
     const toast = document.getElementById('toast');
@@ -796,7 +807,10 @@ if (pdfUploadInput) {
 
             if (parsedQuestions.length > 0) {
                 parsedQuestions.forEach(q => {
-                    addQuestionInput({ text: q.text, subquestions: q.subquestions }, false);
+                    addQuestionInput({
+                        text: cleanQuestionText(q.text),
+                        subquestions: q.subquestions.map(sq => cleanQuestionText(sq))
+                    }, false);
                 });
                 showToast('Import Successful');
             } else {
@@ -1412,13 +1426,16 @@ async function loadInterviewView(interviewId) {
 
                     if (fullGuideline && fullGuideline.questions) {
                         workspaceQuestionsList.innerHTML = fullGuideline.questions.map(q => `
-                            <div class="guideline-q-item">
-                                ${escapeHtml(q.text)}
-                                ${q.subquestions && q.subquestions.length > 0 ? `
-                                    <ul style="margin-top: 0.5rem; padding-left: 1.25rem; font-weight: normal; font-size: 0.85rem; color: var(--text-muted);">
-                                        ${q.subquestions.map(sq => `<li>${escapeHtml(sq)}</li>`).join('')}
-                                    </ul>
-                                ` : ''}
+                            <div class="guideline-q-item" onclick="toggleGuidelineQuestion(this)">
+                                <div class="q-checkbox"></div>
+                                <div class="q-content">
+                                    <span class="q-text">${escapeHtml(cleanQuestionText(q.text))}</span>
+                                    ${q.subquestions && q.subquestions.length > 0 ? `
+                                        <ul style="margin-top: 0.5rem; padding-left: 1.25rem; font-weight: normal; font-size: 0.85rem; color: var(--text-muted); list-style-type: disc;">
+                                            ${q.subquestions.map(sq => `<li>${escapeHtml(cleanQuestionText(sq))}</li>`).join('')}
+                                        </ul>
+                                    ` : ''}
+                                </div>
                             </div>
                         `).join('');
                     } else {

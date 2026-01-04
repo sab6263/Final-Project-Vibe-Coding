@@ -954,7 +954,7 @@ body.fullscreen-active .main-content {
 
 .interview-workspace {
     display: grid;
-    grid-template-columns: 380px 1fr;
+    grid-template-columns: 450px 1fr;
     grid-template-rows: calc(100vh - 120px);
     gap: 1.5rem;
     margin-top: 1rem;
@@ -989,14 +989,71 @@ body.fullscreen-active .main-content {
 }
 
 .guideline-q-item {
-    padding: 0.875rem;
+    padding: 1rem;
     background: white;
-    border-radius: var(--radius-sm);
-    border: 1px solid rgba(0, 0, 0, 0.05);
+    border-radius: var(--radius-md);
+    border: 1px solid rgba(0, 0, 0, 0.08);
     margin-bottom: 0.75rem;
     font-size: 1.05rem;
     color: var(--text-body);
     font-weight: 500;
+    display: flex;
+    gap: 1rem;
+    transition: all 0.2s ease;
+    cursor: pointer;
+}
+
+.guideline-q-item:hover {
+    border-color: var(--brand-primary);
+    background: var(--brand-surface);
+}
+
+.guideline-q-item.is-completed {
+    opacity: 0.5;
+    background: #f8fafc;
+}
+
+.guideline-q-item.is-completed .q-text {
+    text-decoration: line-through;
+}
+
+.q-checkbox {
+    flex-shrink: 0;
+    width: 20px;
+    height: 20px;
+    border: 2px solid #cbd5e1;
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-top: 0.15rem;
+    transition: all 0.2s;
+    background: white;
+}
+
+.guideline-q-item.is-completed .q-checkbox {
+    background: #10b981;
+    border-color: #10b981;
+}
+
+.q-checkbox::after {
+    content: '✓';
+    color: white;
+    font-size: 12px;
+    display: none;
+}
+
+.guideline-q-item.is-completed .q-checkbox::after {
+    display: block;
+}
+
+.q-content {
+    flex: 1;
+}
+
+.q-text {
+    display: block;
+    line-height: 1.4;
 }
 
 /* Main Area - Transcription */
