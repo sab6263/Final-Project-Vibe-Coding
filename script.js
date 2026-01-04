@@ -74,6 +74,7 @@ let projects = [];
 let currentFilter = 'all';
 let searchQuery = '';
 let currentProjectId = null; // ID of the currently open project
+let micStream = null; // Persistent stream to prevent repeated permission prompts
 
 // Interview Session State
 let currentInterviewId = null;
@@ -198,7 +199,6 @@ const currentLanguageText = document.getElementById('currentLanguageText');
 let currentTranscriptionLanguage = 'de-DE';
 
 const startRecordingBtn = document.getElementById('startRecordingBtn');
-const pauseRecordingBtn = document.getElementById('pauseRecordingBtn');
 const stopRecordingBtn = document.getElementById('stopRecordingBtn');
 
 const generalNotesTextarea = document.getElementById('generalNotesTextarea');
@@ -1408,6 +1408,31 @@ async function loadInterviewView(interviewId) {
     transcriptSegments = [];
     generalNotes = [];
 
+    // Reset UI State
+    if (startRecordingBtn) {
+        startRecordingBtn.disabled = false;
+        startRecordingBtn.classList.remove('btn-pause');
+        startRecordingBtn.classList.add('btn-start');
+        startRecordingBtn.querySelector('span').textContent = 'Start Recording';
+        startRecordingBtn.querySelector('svg').innerHTML = `
+            <circle cx="12" cy="12" r="10"></circle>
+            <circle cx="12" cy="12" r="3" fill="currentColor"></circle>
+        `;
+    }
+    if (stopRecordingBtn) stopRecordingBtn.disabled = true;
+    if (recordingStatus) {
+        recordingStatus.textContent = 'Ready';
+        recordingStatus.parentElement.classList.remove('active');
+    }
+
+    // Warm up microphone to prevent repeated permission prompts
+    // Awaiting ensure the permission is handled before other actions
+    await warmupMicrophone();
+
+    if (window.location.protocol === 'file:') {
+        console.warn('Running from file:// protocol. Microphone permissions may not persist. Consider using a local server (e.g., npx serve).');
+    }
+
     try {
         const interview = await window.loadInterviewFromFirestore(interviewId);
         if (interview) {
@@ -1470,8 +1495,13 @@ window.openProject = function (id) {
 // ============================================================================
 
 function initInterviewListeners() {
-    if (startRecordingBtn) startRecordingBtn.addEventListener('click', startInterview);
-    if (pauseRecordingBtn) pauseRecordingBtn.addEventListener('click', pauseInterview);
+    if (startRecordingBtn) {
+        startRecordingBtn.addEventListener('click', () => {
+            if (!isRecording) startInterview();
+            else if (isPaused) resumeInterview();
+            else pauseInterview();
+        });
+    }
     if (stopRecordingBtn) stopRecordingBtn.addEventListener('click', stopInterview);
 
     if (submitGeneralNoteBtn) submitGeneralNoteBtn.addEventListener('click', saveGeneralNote);
@@ -1539,45 +1569,66 @@ function initInterviewListeners() {
 }
 
 function startInterview() {
-    if (isRecording && !isPaused) return;
-
     if (!startTime) {
         startTime = Date.now();
-        transcriptionFeed.innerHTML = ''; // Clear prompt
+        transcriptionFeed.innerHTML = '';
     }
 
     isRecording = true;
     isPaused = false;
 
-    startRecordingBtn.disabled = true;
-    const btnText = startRecordingBtn.querySelector('span');
-    if (btnText) btnText.textContent = 'Start Recording';
+    // UI Updates: Turn into Pause button
+    startRecordingBtn.classList.remove('btn-start');
+    startRecordingBtn.classList.add('btn-pause');
+    startRecordingBtn.querySelector('span').textContent = 'Pause';
+    startRecordingBtn.querySelector('svg').innerHTML = `
+        <rect x="6" y="4" width="4" height="16"></rect>
+        <rect x="14" y="4" width="4" height="16"></rect>
+    `;
 
-    pauseRecordingBtn.disabled = false;
     stopRecordingBtn.disabled = false;
     recordingStatus.textContent = 'Recording...';
-    recordingStatus.style.color = 'var(--brand-primary)';
+    recordingStatus.parentElement.classList.add('active');
 
     startTimer();
     startTranscription();
 }
 
 function pauseInterview() {
-    if (!isRecording) return;
-
     isPaused = true;
-    isRecording = false;
 
-    startRecordingBtn.disabled = false;
-    const btnText = startRecordingBtn.querySelector('span');
-    if (btnText) btnText.textContent = 'Resume Recording';
+    // UI Updates: Turn into Continue button
+    startRecordingBtn.classList.remove('btn-pause');
+    startRecordingBtn.classList.add('btn-start');
+    startRecordingBtn.querySelector('span').textContent = 'Continue Recording';
+    startRecordingBtn.querySelector('svg').innerHTML = `
+        <circle cx="12" cy="12" r="10"></circle>
+        <circle cx="12" cy="12" r="3" fill="currentColor"></circle>
+    `;
 
-    pauseRecordingBtn.disabled = true;
     recordingStatus.textContent = 'Paused';
-    recordingStatus.style.color = '#64748b';
+    recordingStatus.parentElement.classList.remove('active');
 
     stopTimer();
-    stopTranscription();
+    // Keep transcription running in silent mode (isPaused checked in onresult)
+}
+
+function resumeInterview() {
+    isPaused = false;
+
+    // UI Updates: Turn back into Pause button
+    startRecordingBtn.classList.remove('btn-start');
+    startRecordingBtn.classList.add('btn-pause');
+    startRecordingBtn.querySelector('span').textContent = 'Pause';
+    startRecordingBtn.querySelector('svg').innerHTML = `
+        <rect x="6" y="4" width="4" height="16"></rect>
+        <rect x="14" y="4" width="4" height="16"></rect>
+    `;
+
+    recordingStatus.textContent = 'Recording...';
+    recordingStatus.parentElement.classList.add('active');
+
+    startTimer();
 }
 
 async function stopInterview() {
@@ -1589,6 +1640,7 @@ async function stopInterview() {
     stopTranscription();
 
     recordingStatus.textContent = 'Processing...';
+    recordingStatus.parentElement.classList.remove('active');
 
     try {
         await finalizeInterview();
@@ -1613,7 +1665,27 @@ function closeInterview() {
     url.searchParams.delete('interview');
     window.history.pushState({}, '', url);
 
+    // Stop persistent microphone stream
+    if (micStream) {
+        micStream.getTracks().forEach(track => track.stop());
+        micStream = null;
+    }
+
     render();
+}
+
+/**
+ * Requests microphone access once and keeps the stream active
+ * to prevent repeated browser permission prompts.
+ */
+async function warmupMicrophone() {
+    if (micStream) return;
+    try {
+        micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        console.log('Microphone warmed up and persistent.');
+    } catch (err) {
+        console.error('Error warming up microphone:', err);
+    }
 }
 
 // Timer Logic
@@ -1656,6 +1728,8 @@ function startTranscription() {
         recognition.lang = selectedLang;
 
         recognition.onresult = (event) => {
+            if (isPaused) return; // Keep mic open but ignore results while paused
+
             let interimTranscript = '';
             for (let i = event.resultIndex; i < event.results.length; ++i) {
                 const transcript = event.results[i][0].transcript;

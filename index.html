@@ -248,10 +248,18 @@
                         </button>
                         <h1 id="interviewDetailTitle">Interview Workspace</h1>
                     </div>
+                    <div class="header-right">
+                        <button id="stopRecordingBtn" class="record-btn btn-stop" disabled>
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                stroke-width="3">
+                                <rect x="4" y="4" width="16" height="16" fill="currentColor"></rect>
+                            </svg>
+                            <span>Finish Interview</span>
+                        </button>
+                    </div>
                 </header>
 
                 <div class="interview-workspace">
-                    <!-- LEFT COLUMN: Guideline Overview -->
                     <aside class="workspace-sidebar">
                         <div class="sidebar-header">
                             <h3>Guideline</h3>
@@ -259,17 +267,17 @@
                                 style="font-size: 0.9rem; color: var(--text-muted); margin-top: 0.25rem;">Loading...
                             </div>
                         </div>
-                        <div class="sidebar-content" id="workspaceQuestionsList">
-                            <!-- Questions list will appear here -->
-                        </div>
+                        <div class="sidebar-content" id="workspaceQuestionsList"></div>
                     </aside>
 
-                    <!-- MAIN COLUMN & BOTTOM PANEL -->
-                    <main class="workspace-main">
-                        <!-- Transcription Area -->
-                        <div class="transcription-card">
-                            <div class="transcription-header">
-                                <div class="recording-controls">
+                    <main class="workspace-main"
+                        style="flex: 1; display: flex; flex-direction: column; gap: 1.5rem; min-height: 0;">
+                        <div class="transcription-card"
+                            style="flex: 1; display: flex; flex-direction: column; min-height: 0; overflow: hidden; background: white; border-radius: var(--radius-lg); border: 1px solid rgba(0,0,0,0.1); box-shadow: var(--shadow-card);">
+                            <div class="transcription-header"
+                                style="padding: 1rem 1.5rem; background: #f8fafc; border-bottom: 1px solid rgba(0,0,0,0.05); display: flex; align-items: center; justify-content: space-between;">
+                                <div class="recording-controls"
+                                    style="display: flex; gap: 0.75rem; align-items: center;">
                                     <button id="startRecordingBtn" class="record-btn btn-start">
                                         <svg width="20" height="20" viewBox="0 0 24 24" fill="none"
                                             stroke="currentColor" stroke-width="3">
@@ -278,69 +286,54 @@
                                         </svg>
                                         <span>Start Recording</span>
                                     </button>
-                                    <button id="pauseRecordingBtn" class="record-btn btn-pause" disabled>
-                                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none"
-                                            stroke="currentColor" stroke-width="3">
-                                            <rect x="6" y="4" width="4" height="16"></rect>
-                                            <rect x="14" y="4" width="4" height="16"></rect>
-                                        </svg>
-                                        <span>Pause</span>
-                                    </button>
-                                    <button id="stopRecordingBtn" class="record-btn btn-stop" disabled>
-                                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none"
-                                            stroke="currentColor" stroke-width="3">
-                                            <rect x="4" y="4" width="16" height="16" fill="currentColor"></rect>
-                                        </svg>
-                                        <span>Finish Interview</span>
-                                    </button>
+
                                     <div id="recordingTimer" class="timer-display">00:00</div>
 
                                     <div class="custom-dropdown" id="languageSelector">
                                         <button class="dropdown-trigger" id="languageTrigger">
                                             <span id="currentLanguageText">Deutsch (DE)</span>
                                             <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
-                                                stroke="currentColor" stroke-width="2" stroke-linecap="round"
-                                                stroke-linejoin="round">
-                                                <polyline points="6 9 12 15 18 9"></polyline>
+                                                stroke="currentColor" stroke-width="2">
+                                                <path d="M6 9l6 6 6-6"></path>
                                             </svg>
                                         </button>
                                         <div class="dropdown-options hidden" id="languageOptions">
-                                            <div class="option" data-value="en-US">English (US)</div>
                                             <div class="option selected" data-value="de-DE">Deutsch (DE)</div>
+                                            <div class="option" data-value="en-US">English (US)</div>
                                         </div>
                                     </div>
                                 </div>
-                                <div id="recordingStatus"
-                                    style="font-weight: 600; color: var(--text-muted); font-size: 0.9rem;">Ready</div>
+
+                                <div class="recording-status-wrapper">
+                                    <div class="status-indicator"></div>
+                                    <span id="recordingStatus">Ready</span>
+                                </div>
                             </div>
-                            <div id="transcriptionFeed" class="transcription-feed">
-                                <!-- Live transcript segments go here -->
-                                <p style="text-align: center; color: var(--text-muted); margin-top: 2rem;">Click the red
-                                    button to start the interview transcription.</p>
+                            <div id="transcriptionFeed" class="transcription-feed"
+                                style="flex: 1; overflow-y: auto; padding: 1.5rem;">
+                                <p style="text-align: center; color: var(--text-muted); margin-top: 5rem;">Click the
+                                    green button above to start the recording.</p>
                             </div>
                         </div>
 
-                        <!-- BOTTOM PANEL: General Free-Form Notes -->
                         <div class="notes-panel">
                             <h3>Session Notes</h3>
                             <div class="notes-input-wrapper">
                                 <textarea id="generalNotesTextarea"
                                     placeholder="Take general notes here... (Ctrl+Enter to save)"></textarea>
                                 <button id="submitGeneralNoteBtn" class="btn-primary"
-                                    style="height: auto; padding: 0 1.5rem;">
-                                    Save Note
-                                </button>
+                                    style="height: auto; padding: 0 1.5rem;">Save Note</button>
                             </div>
                         </div>
                     </main>
                 </div>
+            </div>
 
-                <!-- Floating Inline Note Popdown (Hidden by default) -->
-                <div id="inlineNotePopdown" class="hidden">
-                    <input type="text" id="inlineNoteInput" placeholder="Add a note to this highlight...">
-                    <button id="saveInlineNoteBtn" class="btn-primary"
-                        style="padding: 0.4rem 0.8rem; font-size: 0.85rem;">Save</button>
-                </div>
+            <!-- Floating Inline Note Popdown (Hidden by default) -->
+            <div id="inlineNotePopdown" class="hidden">
+                <input type="text" id="inlineNoteInput" placeholder="Add a note to this highlight...">
+                <button id="saveInlineNoteBtn" class="btn-primary"
+                    style="padding: 0.4rem 0.8rem; font-size: 0.85rem;">Save</button>
             </div>
         </main>
     </div>
