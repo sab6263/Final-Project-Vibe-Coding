@@ -83,11 +83,13 @@ let isPaused = false;
 let startTime = null;
 let timerInterval = null;
 let recognition = null;
-let transcriptSegments = []; // { id, text, timestamp, notes: [], speaker: 'interviewer'|'respondent' }
+let transcriptSegments = []; // { id, text, timestamp, notes: [], speaker: ..., highlights: [] }
 let currentSegment = null;
 let lastSegmentEndTime = null;
 let currentSpeaker = 'interviewer';
-let speakerIdActive = true;
+let speakerIdActive = false;
+let currentSelection = null; // { text, start, end, segmentId }
+let currentTempMark = null; // Reference to the temporary visual highlight
 let generalNotes = []; // { content, timestamp }
 let selectedSegmentId = null; // For inline notes
 
@@ -185,6 +187,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Interview Recording Listeners
     initInterviewListeners();
+
+    // Initialize Global Tooltip
+    initGlobalTooltip();
 });
 
 // DOM Elements - Interview Workspace
@@ -1411,10 +1416,11 @@ async function loadInterviewView(interviewId) {
     generalNotes = [];
     lastSegmentEndTime = null;
     currentSpeaker = 'interviewer';
-    speakerIdActive = true;
-    if (speakerIdActiveToggle) speakerIdActiveToggle.checked = true;
+    speakerIdActive = false;
+    if (speakerIdActiveToggle) speakerIdActiveToggle.checked = false;
     if (switchSpeakerBtn) {
         switchSpeakerBtn.disabled = true;
+        switchSpeakerBtn.style.opacity = '0.5';
         switchSpeakerBtn.querySelector('span').textContent = 'Interviewer';
         switchSpeakerBtn.classList.add('btn-secondary');
         switchSpeakerBtn.style.background = '';
@@ -1553,14 +1559,32 @@ function initInterviewListeners() {
     }
 
     if (saveInlineNoteBtn) saveInlineNoteBtn.addEventListener('click', saveInlineNote);
+    if (inlineNoteInput) {
+        inlineNoteInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                saveInlineNote();
+            }
+        });
+    }
 
     // Global click to hide popdown
     document.addEventListener('mousedown', (e) => {
         // Hide inline note popdown
         if (inlineNotePopdown && !inlineNotePopdown.classList.contains('hidden') &&
             !inlineNotePopdown.contains(e.target) &&
-            !e.target.classList.contains('transcript-segment')) {
+            (!selectedSegmentId || !document.getElementById(selectedSegmentId).contains(e.target))) {
+
+            inlineNoteInput.value = '';
             inlineNotePopdown.classList.add('hidden');
+
+            // Clean up temporary highlight and current selection
+            if (selectedSegmentId) {
+                const segment = transcriptSegments.find(s => s.id === selectedSegmentId);
+                const el = document.getElementById(selectedSegmentId);
+                if (el && segment) updateSegmentContent(el, segment);
+            }
+            currentSelection = null;
         }
     });
 
@@ -1809,7 +1833,7 @@ function addTranscriptSegment(text) {
     if (!text.trim()) return;
 
     const now = Date.now();
-    const pauseThreshold = 3000; // 3 seconds silence = new line
+    const pauseThreshold = 2000; // 2 seconds silence = new line
 
     const isSpeakerChangePrompt = lastSegmentEndTime && (now - lastSegmentEndTime > pauseThreshold);
 
@@ -1858,9 +1882,8 @@ function updateInterimDisplay(text) {
     if (!interim) {
         interim = document.createElement('span');
         interim.id = 'interimSegment';
-        interim.className = 'transcript-segment';
-        interim.style.opacity = '0.5';
-        interim.style.fontStyle = 'italic';
+        interim.className = 'transcript-segment interim';
+        // Removed opacity and italics for "instant appearance" feel
         transcriptionFeed.appendChild(interim);
     }
     interim.textContent = (transcriptSegments.length > 0 ? ' ' : '') + text;
@@ -1871,15 +1894,60 @@ function renderSegment(segment) {
     const el = document.createElement('span');
     el.className = 'transcript-segment';
     el.id = segment.id;
-    // Add leading space if not the start of a paragraph
-    const isStartOfParagraph = transcriptionFeed.lastElementChild && transcriptionFeed.lastElementChild.className === 'transcript-break';
-    const needsSpace = transcriptSegments.length > 1 && !isStartOfParagraph;
-    el.textContent = (needsSpace ? ' ' : '') + segment.text;
+
+    // Append FIRST so updateSegmentContent can see context (previousSibling)
+    transcriptionFeed.appendChild(el);
+
+    updateSegmentContent(el, segment);
 
     el.addEventListener('mouseup', (e) => handleTextSelection(e, segment.id));
 
-    transcriptionFeed.appendChild(el);
     transcriptionFeed.scrollTop = transcriptionFeed.scrollHeight;
+}
+
+function updateSegmentContent(el, segment) {
+    // Add leading space if not the start of a paragraph
+    // relies on el being in DOM
+    const isStartOfParagraph = el.previousElementSibling && el.previousElementSibling.className === 'transcript-break';
+    const isFirst = !el.previousElementSibling;
+    const needsSpace = !isFirst && !isStartOfParagraph;
+
+    let text = segment.text;
+    const prefix = needsSpace ? ' ' : '';
+
+    if (!segment.highlights || segment.highlights.length === 0) {
+        el.textContent = prefix + text;
+        return;
+    }
+
+    // Build HTML with highlights safely
+    // Highlights are stored with offsets relative to raw segment.text
+    // We must build forward and escape HTML to prevent index mismatch and injection
+    let html = '';
+    let lastIndex = 0;
+
+    // Sort ascending for forward build
+    const sortedHighlights = [...segment.highlights].sort((a, b) => a.start - b.start);
+
+    sortedHighlights.forEach(h => {
+        // Safe append text before highlight
+        if (h.start > lastIndex) {
+            html += escapeHtml(text.substring(lastIndex, h.start));
+        }
+
+        // Safe append highlighted text
+        const chunk = text.substring(h.start, h.end);
+        html += `<mark class="word-highlight" data-segment-id="${segment.id}" data-highlight-start="${h.start}" data-note="${escapeHtml(h.note || '')}">${escapeHtml(chunk)}</mark>`;
+
+        lastIndex = h.end;
+    });
+
+    // Safe append remaining text
+    if (lastIndex < text.length) {
+        html += escapeHtml(text.substring(lastIndex));
+    }
+
+    el.innerHTML = prefix + html;
 }
 
 // Note Taking Logic
@@ -1896,39 +1964,96 @@ function saveGeneralNote() {
 
 function handleTextSelection(e, segmentId) {
     const selection = window.getSelection();
-    if (selection.toString().trim().length > 0) {
+    const rawText = selection.toString();
+    const selectedText = rawText.trim();
+
+    if (selectedText.length > 0) {
         const range = selection.getRangeAt(0);
         const rect = range.getBoundingClientRect();
 
-        selectedSegmentId = segmentId;
+        // Ensure we are in the correct segment
+        let container = range.commonAncestorContainer;
+        if (container.nodeType === 3) container = container.parentNode;
+        const segmentEl = container.closest('.transcript-segment');
 
-        inlineNotePopdown.style.left = `${rect.left}px`;
-        inlineNotePopdown.style.top = `${rect.top - 50 + window.scrollY}px`;
-        inlineNotePopdown.classList.remove('hidden');
-        inlineNoteInput.focus();
+        if (segmentEl && segmentEl.id === segmentId) {
+            selectedSegmentId = segmentId;
 
-        // Highlight selected text visually if possible (simple way: highlight background of segment)
-        const el = document.getElementById(segmentId);
-        el.classList.add('highlighted');
+            // Calculate robust start offset by summing text content length of previous nodes
+            let startOffset = 0;
+            const walker = document.createTreeWalker(segmentEl, NodeFilter.SHOW_TEXT, null, false);
+            let node = walker.nextNode();
+            while (node) {
+                if (node === range.startContainer) {
+                    startOffset += range.startOffset;
+                    break;
+                }
+                startOffset += node.textContent.length;
+                node = walker.nextNode();
+            }
+
+            // Calculate how many spaces were trimmed from the start of the selection
+            const leadingSpaces = rawText.indexOf(selectedText);
+            const adjustedStartOffset = startOffset + (leadingSpaces > 0 ? leadingSpaces : 0);
+
+            // Correct for the leading space if it exists in the element (prefix added by updateSegmentContent)
+            const isStartOfParagraph = segmentEl.previousElementSibling && segmentEl.previousElementSibling.className === 'transcript-break';
+            const firstInFeed = transcriptionFeed.firstChild === segmentEl;
+            const hasLeadingSpace = !firstInFeed && !isStartOfParagraph;
+
+            // We subtract 1 if there's a system leading space, but clamp at 0
+            const finalStart = Math.max(0, adjustedStartOffset - (hasLeadingSpace ? 1 : 0));
+            const finalEnd = finalStart + selectedText.length;
+
+            currentSelection = {
+                text: selectedText,
+                start: finalStart,
+                end: finalEnd
+            };
+
+            // Visually highlight immediately
+            const mark = document.createElement('mark');
+            mark.className = 'word-highlight';
+            mark.style.opacity = '0.7'; // Slight transparency to show it's pending
+            try {
+                range.surroundContents(mark);
+                currentTempMark = mark;
+            } catch (err) {
+                // If selection spans multiple nodes, browser might throw. 
+                // In that case we just rely on the selection color until saved.
+                console.warn('Could not wrap selection in mark:', err);
+            }
+
+            inlineNotePopdown.style.left = `${rect.left}px`;
+            inlineNotePopdown.style.top = `${rect.top - 50 + window.scrollY}px`;
+            inlineNotePopdown.classList.remove('hidden');
+            inlineNoteInput.focus();
+        }
     }
 }
 
 function saveInlineNote() {
     const noteText = inlineNoteInput.value.trim();
-    if (!noteText || !selectedSegmentId) return;
+    if (!noteText || !selectedSegmentId || !currentSelection) return;
 
     const segment = transcriptSegments.find(s => s.id === selectedSegmentId);
     if (segment) {
-        segment.notes.push(noteText);
+        if (!segment.highlights) segment.highlights = [];
+        segment.highlights.push({
+            note: noteText,
+            text: currentSelection.text,
+            start: currentSelection.start,
+            end: currentSelection.end
+        });
 
-        // Visual mark
         const el = document.getElementById(selectedSegmentId);
-        el.title = segment.notes.join('\n'); // Quick hover preview
+        if (el) updateSegmentContent(el, segment);
     }
 
     inlineNoteInput.value = '';
     inlineNotePopdown.classList.add('hidden');
-    showToast('Inline note saved');
+    currentSelection = null;
+    showToast('Note added to selection');
 }
 
 async function finalizeInterview() {
@@ -1943,4 +2068,121 @@ async function finalizeInterview() {
         generalNotes: generalNotes,
         finishedAt: firebase.firestore.FieldValue.serverTimestamp()
     });
+}
+
+// ============================================================================
+// GLOBAL TOOLTIP LOGIC
+// ============================================================================
+function initGlobalTooltip() {
+    // Create tooltip element
+    const tooltip = document.createElement('div');
+    tooltip.id = 'global-tooltip';
+    tooltip.className = 'global-tooltip hidden';
+    document.body.appendChild(tooltip);
+
+    let tooltipTimeout;
+    let isHoveringTooltip = false;
+
+    // Use event delegation for dynamic elements
+    document.addEventListener('mouseover', (e) => {
+        const target = e.target.closest('.word-highlight');
+        if (target) {
+            const note = target.dataset.note;
+            if (note) {
+                clearTimeout(tooltipTimeout);
+
+                // Update content
+                const segmentId = target.dataset.segmentId;
+                const highlightStart = target.dataset.highlightStart;
+
+                tooltip.innerHTML = `
+                    <span>${escapeHtml(note)}</span>
+                    <button class="tooltip-delete-btn" title="Remove Note">✕</button>
+                `;
+
+                const deleteBtn = tooltip.querySelector('.tooltip-delete-btn');
+                if (deleteBtn) {
+                    deleteBtn.onclick = (ev) => {
+                        ev.stopPropagation();
+                        deleteInlineNote(segmentId, highlightStart);
+                        tooltip.classList.remove('visible');
+                        tooltip.classList.add('hidden');
+                    };
+                }
+
+                // Show tooltip
+                tooltip.classList.remove('hidden');
+                tooltip.classList.add('visible');
+
+                // Position calculation
+                const rect = target.getBoundingClientRect();
+                const tooltipRect = tooltip.getBoundingClientRect();
+
+                // Default: Top Center
+                let top = rect.top - tooltipRect.height - 8;
+                let left = rect.left + (rect.width / 2) - (tooltipRect.width / 2);
+
+                // Boundary Checks
+                // Horizontal
+                if (left < 10) left = 10;
+                if (left + tooltipRect.width > window.innerWidth - 10) {
+                    left = window.innerWidth - tooltipRect.width - 10;
+                }
+
+                // Vertical (Flip if not enough space above)
+                if (top < 0) {
+                    top = rect.bottom + 8;
+                    tooltip.classList.add('bottom-oriented');
+                } else {
+                    tooltip.classList.remove('bottom-oriented');
+                }
+
+                tooltip.style.top = `${top}px`;
+                tooltip.style.left = `${left}px`;
+            }
+        } else if (e.target.closest('.global-tooltip')) {
+            isHoveringTooltip = true;
+            clearTimeout(tooltipTimeout);
+        }
+    });
+
+    document.addEventListener('mouseout', (e) => {
+        const target = e.target.closest('.word-highlight');
+        const tooltipTarget = e.target.closest('.global-tooltip');
+
+        if (target || tooltipTarget) {
+            if (tooltipTarget) isHoveringTooltip = false;
+
+            // Small delay to allow moving between highlight and tooltip
+            tooltipTimeout = setTimeout(() => {
+                if (!isHoveringTooltip) {
+                    tooltip.classList.remove('visible');
+                    setTimeout(() => tooltip.classList.add('hidden'), 200);
+                }
+            }, 300);
+        }
+    });
+}
+
+/**
+ * Deletes a highlight from a segment based on start offset
+ */
+function deleteInlineNote(segmentId, startOffset) {
+    if (!segmentId || startOffset === undefined) return;
+
+    const segment = transcriptSegments.find(s => s.id === segmentId);
+    if (!segment || !segment.highlights) return;
+
+    // Remove the highlight with the matching start offset
+    const index = segment.highlights.findIndex(h => h.start == startOffset);
+    if (index > -1) {
+        segment.highlights.splice(index, 1);
+
+        // Re-render
+        const el = document.getElementById(segmentId);
+        if (el) {
+            updateSegmentContent(el, segment);
+            showToast('Note removed');
+        }
+    }
 }

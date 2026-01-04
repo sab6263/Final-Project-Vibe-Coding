@@ -1253,6 +1253,14 @@ body.fullscreen-active #interviewDetailView {
     color: var(--text-body);
 }
 
+.transcription-feed ::selection {
+    background-color: #ffedd5;
+    /* Light orange background */
+    text-decoration: underline var(--brand-primary) 2px;
+    /* Orange underline preview */
+    color: inherit;
+}
+
 .speaker-label {
     display: block;
     font-weight: 700;
@@ -1337,6 +1345,7 @@ input:checked+.slider:before {
     cursor: text;
     transition: background 0.2s;
     border-radius: 4px;
+    white-space: pre-wrap;
 }
 
 .transcript-segment:hover {
@@ -1347,6 +1356,87 @@ input:checked+.slider:before {
     background: #fffbeb;
     box-shadow: 0 0 0 2px #fffbeb;
     border-bottom: 2px solid #fbbf24;
+}
+
+.word-highlight {
+    background: #ffedd5;
+    color: inherit;
+    border-radius: 2px;
+    padding: 0 1px;
+    cursor: help;
+    transition: background 0.2s;
+    border-bottom: 2px solid var(--brand-primary);
+    position: relative;
+}
+
+.word-highlight:hover {
+    background: #fed7aa;
+}
+
+/* Custom Tooltip - Global fixed element to avoid overflow clipping */
+.global-tooltip {
+    position: fixed;
+    background: #1e293b;
+    color: white;
+    padding: 0.4rem 0.6rem;
+    border-radius: 6px;
+    font-size: 0.75rem;
+    line-height: 1.4;
+    white-space: nowrap;
+    z-index: 9999;
+    /* Max visible */
+    pointer-events: auto;
+    /* Enable interaction */
+    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+    opacity: 0;
+    transition: opacity 0.2s, top 0.2s;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.global-tooltip.visible {
+    opacity: 1;
+}
+
+.tooltip-delete-btn {
+    background: rgba(255, 255, 255, 0.2);
+    border: none;
+    cursor: pointer;
+    color: white;
+    border-radius: 50%;
+    width: 16px;
+    height: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 10px;
+    padding: 0;
+    transition: background 0.2s;
+}
+
+.tooltip-delete-btn:hover {
+    background: #ef4444;
+}
+
+/* Tooltip Arrow */
+.global-tooltip::after {
+    content: '';
+    position: absolute;
+    top: 100%;
+    /* Arrow at bottom pointing down by default, JS handles orientation if needed */
+    left: 50%;
+    transform: translateX(-50%);
+    border: 6px solid transparent;
+    border-top-color: #1e293b;
+}
+
+/* If we need to flip the arrow when tooltip is below, we can add a class .bottom-arrow */
+.global-tooltip.bottom-oriented::after {
+    top: auto;
+    bottom: 100%;
+    border-top-color: transparent;
+    border-bottom-color: #1e293b;
 }
 
 .transcript-break {
