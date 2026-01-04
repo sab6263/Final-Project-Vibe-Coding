@@ -485,6 +485,7 @@ body {
     box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
     overflow: hidden;
     animation: slideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+    font-family: var(--font-heading);
 }
 
 .modal-header {
@@ -499,6 +500,7 @@ body {
     font-size: 1.5rem;
     font-weight: 800;
     color: var(--text-title);
+    font-family: var(--font-heading);
 }
 
 .icon-btn {
@@ -526,6 +528,7 @@ body {
     margin-bottom: 0.75rem;
     font-weight: 600;
     color: var(--text-body);
+    font-family: var(--font-heading);
 }
 
 .input-group input {
@@ -537,6 +540,7 @@ body {
     transition: all 0.2s;
     outline: none;
     background: rgba(255, 255, 255, 0.5);
+    font-family: var(--font-heading);
 }
 
 .input-group input:focus {

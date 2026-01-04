@@ -35,10 +35,12 @@
 }
 
 .question-main-row,
-.sub-question-row {
+.question-sub-row {
     display: flex;
     gap: 0.75rem;
     align-items: center;
+    width: 100%;
+    /* Ensure full width */
 }
 
 .sub-questions-container {
@@ -68,8 +70,11 @@
 
 .sub-q-input {
     font-size: 0.95rem;
-    padding: 0.6rem 0.9rem;
+    padding: 0.75rem 1rem;
+    /* Matched to main input */
     background: rgba(255, 255, 255, 0.4);
+    min-width: 0;
+    /* Prevent flex overflow issues */
 }
 
 .question-input:focus {

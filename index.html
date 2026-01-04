@@ -267,9 +267,79 @@
         </div>
     </div>
 
+    <!-- Guideline Creation Mode Modal -->
+    <div id="guidelineModeModal" class="modal-overlay hidden">
+        <div class="modal-container" style="max-width: 500px;">
+            <div class="modal-header">
+                <h2>Create Guideline</h2>
+                <button id="closeGuidelineModeModal" class="icon-btn">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                    </svg>
+                </button>
+            </div>
+            <div class="modal-body">
+                <p style="margin-bottom: 2rem; color: var(--text-muted);">How would you like to create your new
+                    interview guideline?</p>
+                <div style="display: grid; gap: 1rem;">
+                    <button id="manualCreateBtn" class="btn-dashed"
+                        style="padding: 1.5rem; justify-content: flex-start; text-align: left; border: 1px solid var(--border-light); background: white;">
+                        <div
+                            style="background: rgba(234, 88, 12, 0.1); padding: 0.75rem; border-radius: 8px; margin-right: 1rem;">
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                stroke-width="2" style="color: var(--brand-primary);">
+                                <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                                <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+                            </svg>
+                        </div>
+                        <div>
+                            <strong
+                                style="display: block; color: var(--text-title); font-size: 1.05rem; margin-bottom: 0.25rem;">Create
+                                Manually</strong>
+                            <span style="font-weight: 400; font-size: 0.9rem;">Start from scratch and add questions one
+                                by one.</span>
+                        </div>
+                    </button>
+
+                    <button id="uploadPdfBtn" class="btn-dashed"
+                        style="padding: 1.5rem; justify-content: flex-start; text-align: left; border: 1px solid var(--border-light); background: white;">
+                        <div
+                            style="background: rgba(59, 130, 246, 0.1); padding: 0.75rem; border-radius: 8px; margin-right: 1rem;">
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                stroke-width="2" style="color: #3b82f6;">
+                                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                                <polyline points="14 2 14 8 20 8"></polyline>
+                                <line x1="12" y1="18" x2="12" y2="12"></line>
+                                <line x1="9" y1="15" x2="15" y2="15"></line>
+                            </svg>
+                        </div>
+                        <div>
+                            <strong
+                                style="display: block; color: var(--text-title); font-size: 1.05rem; margin-bottom: 0.25rem;">Upload
+                                PDF</strong>
+                            <span style="font-weight: 400; font-size: 0.9rem;">Auto-extract questions and topics from an
+                                existing file.</span>
+                        </div>
+                    </button>
+                </div>
+                <!-- Hidden AI Input (Logic Compatibility) -->
+                <input type="hidden" id="aiApiKey">
+
+                <!-- Hidden Input for PDF Upload -->
+                <input type="file" id="pdfUploadInput" accept="application/pdf" style="display: none;">
+            </div>
+        </div>
+    </div>
+
     <!-- Toast Notification (Optional polish) -->
     <div id="toast" class="toast hidden">Project Created</div>
 
+    <!-- PDF.js -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+    <script>
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+    </script>
     <script src="script.js"></script>
 </body>
 

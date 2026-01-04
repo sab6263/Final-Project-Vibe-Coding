@@ -429,15 +429,277 @@ const saveGuidelineBtn = document.getElementById('saveGuidelineBtn');
 const backToProjectFromGuidelineBtn = document.getElementById('backToProjectFromGuidelineBtn');
 const createGuidelineBtn = document.getElementById('createGuidelineBtn');
 
+// DOM Elements - Guideline Mode Modal
+const guidelineModeModal = document.getElementById('guidelineModeModal');
+const closeGuidelineModeModal = document.getElementById('closeGuidelineModeModal');
+const manualCreateBtn = document.getElementById('manualCreateBtn');
+const uploadPdfBtn = document.getElementById('uploadPdfBtn');
+const pdfUploadInput = document.getElementById('pdfUploadInput');
+const aiApiKeyInput = document.getElementById('aiApiKey');
+
+
 // Guideline State
 let currentGuidelineParams = null; // { projectId }
+
+// Load API Key from local storage if exists, or use default
+let storedKey = localStorage.getItem('contexture_api_key');
+if (!storedKey) {
+    storedKey = 'AIzaSyAjdakuU-dH_p6xYQNugLh8eUsY8jdT3zI';
+    localStorage.setItem('contexture_api_key', storedKey);
+}
+
+if (storedKey && aiApiKeyInput) {
+    aiApiKeyInput.value = storedKey;
+}
+
+if (aiApiKeyInput) {
+    aiApiKeyInput.addEventListener('change', (e) => {
+        localStorage.setItem('contexture_api_key', e.target.value.trim());
+    });
+}
 
 // --- GUIDELINE ACTIONS ---
 
 if (createGuidelineBtn) {
     createGuidelineBtn.addEventListener('click', () => {
+        // Open Mode Choice Modal instead of editor directly
+        guidelineModeModal.classList.remove('hidden');
+    });
+}
+
+if (closeGuidelineModeModal) {
+    closeGuidelineModeModal.addEventListener('click', () => {
+        guidelineModeModal.classList.add('hidden');
+    });
+}
+
+if (manualCreateBtn) {
+    manualCreateBtn.addEventListener('click', () => {
+        guidelineModeModal.classList.add('hidden');
         openGuidelineEditor(currentProjectId);
     });
+}
+
+if (uploadPdfBtn) {
+    uploadPdfBtn.addEventListener('click', () => {
+        pdfUploadInput.click();
+    });
+}
+
+if (pdfUploadInput) {
+    pdfUploadInput.addEventListener('change', async (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        showToast('Processing PDF...');
+
+        try {
+            const arrayBuffer = await file.arrayBuffer();
+            const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+
+            let extractedText = '';
+            for (let i = 1; i <= pdf.numPages; i++) {
+                const page = await pdf.getPage(i);
+                const textContent = await page.getTextContent();
+                const pageText = textContent.items.map(item => item.str).join('\n');
+                extractedText += pageText + '\n';
+            }
+
+
+            // Heuristic Parsing Only
+            const parsedQuestions = parsePdfContent(extractedText);
+
+            guidelineModeModal.classList.add('hidden');
+            openGuidelineEditor(currentProjectId);
+
+            // Populate Editor
+            questionsContainer.innerHTML = '';
+
+            if (file.name) {
+                guidelineTitle.textContent = file.name.replace('.pdf', '');
+            }
+
+            if (parsedQuestions.length > 0) {
+                parsedQuestions.forEach(q => {
+                    addQuestionInput({ text: q.text, subquestions: q.subquestions }, false);
+                });
+                showToast('Import Successful');
+            } else {
+                addQuestionInput(); // Fallback
+                showToast('No structured questions found');
+            }
+
+        } catch (error) {
+            console.error(error);
+            showToast('Error reading PDF');
+        }
+
+        // Reset input
+        e.target.value = '';
+    });
+}
+
+// { projectId, guidelineId? }
+function parsePdfContent(text) {
+    const lines = text.split(/\n+/).map(l => l.trim()).filter(l => l.length > 0);
+    const questions = [];
+    let currentQuestion = null;
+    let nextIsSub = false;
+    let orphanPrefix = ''; // Store "1.1" or "-" from previous line
+
+    // --- PATTERNS ---
+
+    // 1. Level 1: Main Questions
+    const mainExplicitPattern = /^(?:(?:\d+|[IVX]+|[A-Z])[\.\)]|Q\d+|Question\s*\d*:?|Topic\s*\d*:?|Section\s*\d*:?)\s+(.+)/i;
+
+    // 2. Level 2: Sub-questions
+    // Forms: Bullets, "1.1", "a)", "(a)"
+    const subExplicitPattern = /^[\s\t]*([•\-\–\—\*·◦▪▫\u2022\u2023\u25E6\u2043\u2219]|\d+\.\d+|[a-z]\s*\)|[a-z]\s*\.|[ivx]+\.|[A-Z]\.)\s+(.+)/i;
+
+    // Orphan Bullet/Number Only (e.g. "-", "1.1", "a)") on its own line
+    // Removed "-" from strict orphan check if it's potentially a hyphenation
+    const subBulletOnly = /^[\s\t]*([•\–\—\*·◦▪▫\u2022\u2023\u25E6\u2043\u2219]|\d+\.\d+|[a-z]\s*\)|[a-z]\s*\.|[ivx]+\.|[A-Z]\.)[\s\t]*$/i;
+
+    // Helper to check if line looks like a question
+    const isQuestion = (str) => str.trim().endsWith('?');
+
+    // Helper to check if it's likely a hyphenated continuation (e.g. "- up")
+    // Broader check for any dash-like char followed by space/lowercase
+    const isHyphenation = (line) => {
+        // Include all bullet/dash chars from subExplicitPattern just in case
+        return /^[•\-\–\—\*·◦▪▫\u2022\u2023\u25E6\u2043\u2219]\s*[a-z]/.test(line);
+    };
+
+    lines.forEach((line, index) => {
+        const trimmed = line.trim();
+        if (!trimmed) return;
+
+        console.log(`Line ${index}: "${trimmed}"`);
+
+        // -- STATE: Expecting Sub-question (Orphan Bullet from previous line) --
+        if (nextIsSub && currentQuestion) {
+            const combined = orphanPrefix ? `${orphanPrefix} ${trimmed}` : trimmed;
+            console.log('  -> Orphan merge:', combined);
+            currentQuestion.subquestions.push(combined);
+            nextIsSub = false;
+            orphanPrefix = '';
+            return;
+        }
+
+        // -- SPECIAL CHECK: Hyphenation / Multi-line Split --
+        if (currentQuestion && currentQuestion.subquestions.length > 0) {
+            const lastSubIdx = currentQuestion.subquestions.length - 1;
+            const lastSub = currentQuestion.subquestions[lastSubIdx];
+
+            console.log(`  -> Checking hyphenation. Last sub: "${lastSub}"`);
+            console.log(`  -> Test 1 (non-alphanum): ${/^[^a-z0-9]/i.test(trimmed)}`);
+            console.log(`  -> Test 2 (non-word+lower): ${/^[^\w]\s*[a-z]/.test(trimmed)}`);
+
+            // SPECIAL CASE: Lone hyphen/dash on its own line (e.g., Line 21: "-")
+            // This is part of a hyphenated word split across 3 lines: "follow" / "-" / "up..."
+            if (/^[\-\–\—]$/.test(trimmed)) {
+                console.log('  -> Lone hyphen detected, appending to previous line');
+                // Just append the dash to the previous line, don't add as new question
+                // The NEXT line will be the continuation
+                currentQuestion.subquestions[lastSubIdx] = lastSub + '-';
+                return;
+            }
+
+            // Hyphenation detection: dash/bullet followed by lowercase on SAME line
+            // Regex: Starts with anything that is NOT a letter/number (e.g. - . • *), optional space, then lowercase.
+            if (/^[^a-z0-9]/i.test(trimmed) && /^[^\w]\s*[a-z]/.test(trimmed)) {
+                // It starts with a non-word char and continues with lowercase.
+                // It is almost certainly a continuation "follow" + "- up".
+                console.log('  -> MERGING hyphenation:', trimmed);
+
+                // Remove the prefix (all non-word chars and spaces)
+                const appendText = trimmed.replace(/^[^\w]+\s*/, '');
+
+                // Use dash separator to reconstruct "follow-up"
+                currentQuestion.subquestions[lastSubIdx] = lastSub + '-' + appendText;
+                console.log(`  -> Result: "${currentQuestion.subquestions[lastSubIdx]}"`);
+                return;
+            }
+
+            // Standard continuation check (no dash, just lowercase text)
+            // e.g. "Question text..." \n "that continues here."
+            if (!/[.?!]$/.test(lastSub) && /^[a-z]/.test(trimmed)) {
+                console.log('  -> Standard continuation merge');
+                currentQuestion.subquestions[lastSubIdx] = lastSub + ' ' + trimmed;
+                return;
+            }
+        }
+
+        // -- CHECK 1: Explicit Sub-question Markers --
+        const subMatch = trimmed.match(subExplicitPattern);
+
+        // Safety: If it matched a dash bullet, but follows with lowercase...
+        // ...we should have caught it in isHyphenation above! 
+        // If we are here, it is NOT hyphenation.
+
+        if (subMatch) {
+            console.log('  -> Matched as explicit sub-question');
+            if (currentQuestion) {
+                currentQuestion.subquestions.push(trimmed);
+            } else {
+                currentQuestion = { text: trimmed, subquestions: [] };
+            }
+            return;
+        }
+
+        // -- CHECK 2: Main Question Markers --
+        const mainMatch = trimmed.match(mainExplicitPattern);
+        if (mainMatch) {
+            if (currentQuestion) questions.push(currentQuestion);
+            currentQuestion = { text: trimmed, subquestions: [] };
+            return;
+        }
+
+        // -- CHECK 3: Visual/Implicit Markers --
+
+        // Orphan Bullet/Number
+        if (subBulletOnly.test(trimmed)) {
+            // Check if it's potentially a hyphenation start (like just "-") that got split from "up"?
+            // Unlikely to have just "-" on a line for hyphenation, usually "- up".
+            // But if it is JUST a dash, it really looks like a split bullet.
+
+            // Double check it's not a numbered bullet like "1.1" which we want to keep
+            // If it's just a single dash, and the next line starts with lowercase, it's likely hyphenation.
+            // But if it's just a dash on its own line, it's more likely an orphan bullet.
+            // The `isHyphenation` check above handles the `- up` case.
+            // This `subBulletOnly` is for cases like `1.1` or `a)` or `•` on its own line.
+            // We want to avoid `subBulletOnly` catching a lone `-` if it's part of a hyphenated word.
+            // The current `subBulletOnly` regex already excludes a lone `-` if it's not followed by a space.
+            // The `isHyphenation` regex handles `- ` followed by a lowercase letter.
+            // So, if we reach here with just `-` it's treated as an orphan bullet.
+            nextIsSub = true;
+            orphanPrefix = trimmed;
+            return;
+        }
+
+        // Implicit Sub-question
+        if (currentQuestion) {
+            if (isQuestion(trimmed)) {
+                currentQuestion.subquestions.push(trimmed);
+                return;
+            }
+            // Fallback
+            currentQuestion.subquestions.push(trimmed);
+            return;
+        }
+
+        // -- CHECK 4: Initial Fallback --
+        if (isQuestion(trimmed)) {
+            currentQuestion = { text: trimmed, subquestions: [] };
+            return;
+        }
+    });
+
+    if (currentQuestion) {
+        questions.push(currentQuestion);
+    }
+
+    return questions;
 }
 
 if (addQuestionBtn) {
@@ -492,36 +754,28 @@ function closeGuidelineEditor() {
 }
 
 // Data = { text: string, subquestions: string[] }
+// Data = { text: string, subquestions: string[] }
 function addQuestionInput(data = { text: '', subquestions: [] }, autoFocus = true) {
+    if (!data) data = { text: '', subquestions: [] };
+
     const wrapper = document.createElement('div');
     wrapper.className = 'question-block';
-    wrapper.style.marginBottom = '1rem';
 
     // Main Question Row
     const mainRow = document.createElement('div');
     mainRow.className = 'question-main-row';
-    mainRow.style.display = 'flex';
-    mainRow.style.gap = '0.5rem';
-    mainRow.style.alignItems = 'center';
 
     const input = document.createElement('input');
     input.type = 'text';
     input.className = 'question-input main-q-input';
     input.placeholder = 'Enter main question or topic...';
     input.value = data.text || '';
-    input.style.fontWeight = '600';
-    input.style.flex = '1';
 
     // Add Subquestion Button
     const addSubBtn = document.createElement('button');
     addSubBtn.className = 'icon-btn';
     addSubBtn.title = 'Add Sub-question';
     addSubBtn.innerHTML = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>`;
-    addSubBtn.style.background = 'rgba(0,0,0,0.05)';
-    addSubBtn.style.borderRadius = 'var(--radius-md)';
-    addSubBtn.style.cursor = 'pointer';
-    addSubBtn.style.width = '42px';
-    addSubBtn.style.height = '42px';
 
     // Delete Main Question Button
     const deleteBtn = document.createElement('button');
@@ -537,56 +791,42 @@ function addQuestionInput(data = { text: '', subquestions: [] }, autoFocus = tru
     // Subquestions Container
     const subContainer = document.createElement('div');
     subContainer.className = 'sub-questions-container';
-    subContainer.style.paddingLeft = '1.5rem';
-    subContainer.style.marginTop = '0.5rem';
-    subContainer.style.display = 'flex';
-    subContainer.style.flexDirection = 'column';
-    subContainer.style.gap = '0.5rem';
-    subContainer.style.borderLeft = '2px solid rgba(0,0,0,0.05)';
-    subContainer.style.marginLeft = '0.75rem';
-
-    // Helper to add subquestion input
-    const addSubInput = (text = '', focus = true) => {
-        const subRow = document.createElement('div');
-        subRow.className = 'sub-question-row';
-        subRow.style.display = 'flex';
-        subRow.style.gap = '0.5rem';
-        subRow.style.alignItems = 'center';
-
-        const subInput = document.createElement('input');
-        subInput.type = 'text';
-        subInput.className = 'question-input sub-q-input';
-        subInput.placeholder = 'Sub-question...';
-        subInput.value = text;
-        subInput.style.flex = '1';
-        subInput.style.fontSize = '0.9rem';
-
-        const delSubBtn = document.createElement('button');
-        delSubBtn.className = 'delete-item-btn';
-        delSubBtn.style.padding = '0.35rem';
-        delSubBtn.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>`;
-        delSubBtn.onclick = () => subRow.remove();
-
-        subRow.appendChild(subInput);
-        subRow.appendChild(delSubBtn);
-        subContainer.appendChild(subRow);
-
-        if (focus) setTimeout(() => subInput.focus(), 50);
-    };
-
-    addSubBtn.onclick = () => addSubInput();
-
-    // Populate existing subquestions
-    if (data.subquestions && data.subquestions.length > 0) {
-        data.subquestions.forEach(sq => addSubInput(sq, false));
-    }
 
     wrapper.appendChild(subContainer);
     questionsContainer.appendChild(wrapper);
 
-    if (autoFocus) {
-        setTimeout(() => input.focus(), 50);
+    // Helper to add sub-input
+    const addSubInput = (text = '', focus = true) => {
+        const subRow = document.createElement('div');
+        subRow.className = 'question-sub-row'; // Matches updated CSS
+
+        const subInput = document.createElement('input');
+        subInput.type = 'text';
+        subInput.className = 'question-input sub-q-input';
+        subInput.placeholder = 'Follow-up question...';
+        subInput.value = text;
+
+        const subDeleteBtn = document.createElement('button');
+        subDeleteBtn.className = 'delete-item-btn small';
+        subDeleteBtn.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>`;
+        subDeleteBtn.onclick = () => subRow.remove();
+
+        subRow.appendChild(subInput);
+        subRow.appendChild(subDeleteBtn);
+        subContainer.appendChild(subRow);
+
+        if (focus) subInput.focus();
+    };
+
+    // Load existing subquestions
+    if (data.subquestions && Array.isArray(data.subquestions)) {
+        data.subquestions.forEach(subText => addSubInput(subText, false));
     }
+
+    // Event Listener for Add Sub Button
+    addSubBtn.onclick = () => addSubInput();
+
+    if (autoFocus) input.focus();
 }
 
 function saveGuideline() {
