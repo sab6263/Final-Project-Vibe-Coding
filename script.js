@@ -2367,7 +2367,21 @@ function saveInlineNote() {
     const segment = transcriptSegments.find(s => s.id === selectedSegmentId);
     if (!segment) return;
 
-    // Add to model highlights
+    // 1. Sync Text Content First (Capture any user typo fixes)
+    let el = document.getElementById(selectedSegmentId);
+    if (!el) {
+        // Fallback for Review Mode where IDs might not be set on the div
+        el = document.querySelector(`.review-segment[data-segment-id="${selectedSegmentId}"]`);
+    }
+
+    if (el) {
+        const contentSpan = el.querySelector('[contenteditable]');
+        if (contentSpan) {
+            segment.text = contentSpan.innerText; // Capture latest text
+        }
+    }
+
+    // 2. Add new note to model
     if (!segment.highlights) segment.highlights = [];
     segment.highlights.push({
         note: noteText,
@@ -2376,70 +2390,29 @@ function saveInlineNote() {
         end: currentSelection.end
     });
 
-    const el = document.getElementById(selectedSegmentId);
+    // 3. Clear stored HTML to force regeneration
+    // This is the "Nuclear" fix: instead of patching the DOM, we rebuild it from the model.
+    // This ensures that the HTML structure always perfectly matches the highlights,
+    // and guarantees that createReviewSegmentElement attaches the event listeners correctly.
+    segment.html = '';
+
+    // 4. Re-render
     if (el) {
         if (el.classList.contains('review-segment')) {
-            // Review Mode:
-            // Operate directly on the live DOM to ensure we capture the temporary mark correctly.
-            const contentSpan = el.querySelector('[contenteditable]');
-            if (contentSpan) {
-                // 1. Find the target mark in the LIVE DOM using the unique temp ID
-                let targetMark = contentSpan.querySelector('.word-highlight[data-temp-id="pending-note"]');
-
-                // Fallback: Use the global reference if it's still connected and inside this span
-                if (!targetMark && currentTempMark && contentSpan.contains(currentTempMark)) {
-                    targetMark = currentTempMark;
-                }
-
-                if (targetMark) {
-                    targetMark.setAttribute('data-segment-id', selectedSegmentId);
-                    targetMark.setAttribute('data-highlight-start', currentSelection.start);
-                    targetMark.setAttribute('data-note', noteText);
-
-                    // Clean up temporary attributes
-                    targetMark.removeAttribute('data-temp-id');
-                    targetMark.style.opacity = '';
-                    targetMark.style.removeProperty('opacity');
-
-                    targetMark.classList.add('word-highlight');
-                    targetMark.style.pointerEvents = 'all'; // Ensure it's clickable/hoverable
-
-                    // CRITICAL: Manually attach event listeners HERE to ensure they work immediately
-                    // without relying on re-render or global delegation (which might be flaky inside contenteditable)
-                    targetMark.addEventListener('mouseenter', (e) => {
-                        if (typeof showGlobalTooltip === 'function') showGlobalTooltip(e.target);
-                    });
-                    targetMark.addEventListener('mouseleave', (e) => {
-                        if (typeof hideGlobalTooltip === 'function') hideGlobalTooltip();
-                    });
-
-                } else {
-                    console.warn('Could not find target mark [data-temp-id="pending-note"] to save note to!');
-                }
-
-                // 2. Sync Model
-                segment.html = contentSpan.innerHTML;
-                segment.text = contentSpan.innerText;
-            }
-
-            // 3. SKIP RE-RENDER for Review Mode
-            // We just updated the DOM manually and sync'd the model.
-            // Re-rendering (replaceWith) risks detaching listeners or causing race conditions.
-            // The current element in the DOM is now perfect.
-
-            currentTempMark = null;
-
+            const newEl = createReviewSegmentElement(segment);
+            el.replaceWith(newEl);
         } else {
-            // Live Mode: Safe to rebuild content
             updateSegmentContent(el, segment);
         }
-
-        pushToReviewHistory();
     }
 
+    pushToReviewHistory();
+
+    // 5. Cleanup
     inlineNoteInput.value = '';
     inlineNotePopdown.classList.add('hidden');
     currentSelection = null;
+    currentTempMark = null;
     showToast('Note added');
 }
 
@@ -3509,6 +3482,7 @@ document.addEventListener('mouseup', (e) => {
 function createReviewSegmentElement(segment) {
     const div = document.createElement('div');
     div.className = 'review-item review-segment';
+    div.id = segment.id; // Important for DOM lookups
     div.setAttribute('data-segment-id', segment.id);
 
     // Use flex for horizontal alignment and vertical centering
