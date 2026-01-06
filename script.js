@@ -2341,6 +2341,7 @@ function handleTextSelection(e, segmentId) {
             const mark = document.createElement('mark');
             mark.className = 'word-highlight';
             mark.style.opacity = '0.7'; // Slight transparency to show it's pending
+            mark.setAttribute('data-temp-id', 'pending-note'); // Unique ID for saving
             try {
                 range.surroundContents(mark);
                 currentTempMark = mark;
@@ -2366,6 +2367,7 @@ function saveInlineNote() {
     const segment = transcriptSegments.find(s => s.id === selectedSegmentId);
     if (!segment) return;
 
+    // Add to model highlights
     if (!segment.highlights) segment.highlights = [];
     segment.highlights.push({
         note: noteText,
@@ -2377,18 +2379,56 @@ function saveInlineNote() {
     const el = document.getElementById(selectedSegmentId);
     if (el) {
         if (el.classList.contains('review-segment')) {
-            // Review Mode: Correctly update the existing DOM without destroying structure
-            if (currentTempMark) {
-                currentTempMark.setAttribute('data-segment-id', selectedSegmentId);
-                currentTempMark.setAttribute('data-highlight-start', currentSelection.start);
-                currentTempMark.setAttribute('data-note', escapeHtml(noteText)); // Ensure note is set on DOM
-                currentTempMark.style.opacity = ''; // Make permanent
-                currentTempMark = null; // Clear reference
+            // Review Mode:
+            // Operate directly on the live DOM to ensure we capture the temporary mark correctly.
+            const contentSpan = el.querySelector('[contenteditable]');
+            if (contentSpan) {
+                // 1. Find the target mark in the LIVE DOM using the unique temp ID
+                let targetMark = contentSpan.querySelector('.word-highlight[data-temp-id="pending-note"]');
+
+                // Fallback: Use the global reference if it's still connected and inside this span
+                if (!targetMark && currentTempMark && contentSpan.contains(currentTempMark)) {
+                    targetMark = currentTempMark;
+                }
+
+                if (targetMark) {
+                    targetMark.setAttribute('data-segment-id', selectedSegmentId);
+                    targetMark.setAttribute('data-highlight-start', currentSelection.start);
+                    targetMark.setAttribute('data-note', noteText);
+
+                    // Clean up temporary attributes
+                    targetMark.removeAttribute('data-temp-id');
+                    targetMark.style.opacity = '';
+                    targetMark.style.removeProperty('opacity');
+
+                    targetMark.classList.add('word-highlight');
+                    targetMark.style.pointerEvents = 'all'; // Ensure it's clickable/hoverable
+
+                    // CRITICAL: Manually attach event listeners HERE to ensure they work immediately
+                    // without relying on re-render or global delegation (which might be flaky inside contenteditable)
+                    targetMark.addEventListener('mouseenter', (e) => {
+                        if (typeof showGlobalTooltip === 'function') showGlobalTooltip(e.target);
+                    });
+                    targetMark.addEventListener('mouseleave', (e) => {
+                        if (typeof hideGlobalTooltip === 'function') hideGlobalTooltip();
+                    });
+
+                } else {
+                    console.warn('Could not find target mark [data-temp-id="pending-note"] to save note to!');
+                }
+
+                // 2. Sync Model
+                segment.html = contentSpan.innerHTML;
+                segment.text = contentSpan.innerText;
             }
 
-            // Sync the updated DOM to segment.html so undo/redo works
-            // We can reuse the helper we appended earlier
-            updateActiveSegmentFromDOM();
+            // 3. SKIP RE-RENDER for Review Mode
+            // We just updated the DOM manually and sync'd the model.
+            // Re-rendering (replaceWith) risks detaching listeners or causing race conditions.
+            // The current element in the DOM is now perfect.
+
+            currentTempMark = null;
+
         } else {
             // Live Mode: Safe to rebuild content
             updateSegmentContent(el, segment);
@@ -2400,7 +2440,7 @@ function saveInlineNote() {
     inlineNoteInput.value = '';
     inlineNotePopdown.classList.add('hidden');
     currentSelection = null;
-    showToast('Note added to selection');
+    showToast('Note added');
 }
 
 async function finalizeInterview() {
@@ -2432,94 +2472,105 @@ function escapeHtml(text) {
         .replace(/'/g, "&#039;");
 }
 
-function initGlobalTooltip() {
-    // Create tooltip element
-    const tooltip = document.createElement('div');
-    tooltip.id = 'global-tooltip';
-    tooltip.className = 'global-tooltip hidden';
-    document.body.appendChild(tooltip);
+let globalTooltip = null;
+let globalTooltipTimeout = null;
+let isHoveringGlobalTooltip = false;
 
-    let tooltipTimeout;
-    let isHoveringTooltip = false;
+function showGlobalTooltip(target) {
+    if (!globalTooltip) return;
+    if (!target) return;
 
-    // Use event delegation for dynamic elements
-    document.addEventListener('mouseover', (e) => {
-        const target = e.target.closest('.word-highlight');
-        if (target) {
-            const note = target.dataset.note;
-            if (note) {
-                clearTimeout(tooltipTimeout);
+    const note = target.dataset.note || target.getAttribute('data-note');
+    if (note) {
+        clearTimeout(globalTooltipTimeout);
 
-                // Update content
-                const segmentId = target.dataset.segmentId;
-                const highlightStart = target.dataset.highlightStart;
+        // Update content
+        const segmentId = target.dataset.segmentId;
+        const highlightStart = target.dataset.highlightStart;
 
-                tooltip.innerHTML = `
-                    <span style="flex: 1;">${escapeHtml(note)}</span>
-                    <button class="tooltip-delete-btn" title="Remove Note">✕</button>
-                `;
+        globalTooltip.innerHTML = `
+            <span style="flex: 1;">${escapeHtml(note)}</span>
+            <button class="tooltip-delete-btn" title="Remove Note">✕</button>
+        `;
 
-                const deleteBtn = tooltip.querySelector('.tooltip-delete-btn');
-                if (deleteBtn) {
-                    deleteBtn.onclick = (ev) => {
-                        ev.stopPropagation();
-                        deleteInlineNote(segmentId, highlightStart);
-                        tooltip.classList.remove('visible');
-                        tooltip.classList.add('hidden');
-                    };
-                }
-
-                // Show tooltip
-                tooltip.classList.remove('hidden');
-                tooltip.classList.add('visible');
-
-                // Position calculation
-                const rect = target.getBoundingClientRect();
-                const tooltipRect = tooltip.getBoundingClientRect();
-
-                // Default: Top Center
-                let top = rect.top - tooltipRect.height - 8;
-                let left = rect.left + (rect.width / 2) - (tooltipRect.width / 2);
-
-                // Boundary Checks
-                // Horizontal
-                if (left < 10) left = 10;
-                if (left + tooltipRect.width > window.innerWidth - 10) {
-                    left = window.innerWidth - tooltipRect.width - 10;
-                }
-
-                // Vertical (Flip if not enough space above)
-                if (top < 0) {
-                    top = rect.bottom + 8;
-                    tooltip.classList.add('bottom-oriented');
-                } else {
-                    tooltip.classList.remove('bottom-oriented');
-                }
-
-                tooltip.style.top = `${top}px`;
-                tooltip.style.left = `${left}px`;
-            }
-        } else if (e.target.closest('.global-tooltip')) {
-            isHoveringTooltip = true;
-            clearTimeout(tooltipTimeout);
+        const deleteBtn = globalTooltip.querySelector('.tooltip-delete-btn');
+        if (deleteBtn) {
+            deleteBtn.onclick = (ev) => {
+                ev.stopPropagation();
+                deleteInlineNote(segmentId, highlightStart);
+                globalTooltip.classList.remove('visible');
+                globalTooltip.classList.add('hidden');
+            };
         }
+
+        // Show tooltip
+        globalTooltip.classList.remove('hidden');
+        globalTooltip.classList.add('visible');
+
+        // Position calculation
+        const rect = target.getBoundingClientRect();
+        const tooltipRect = globalTooltip.getBoundingClientRect();
+
+        // Default: Top Center
+        let top = rect.top - tooltipRect.height - 8;
+        let left = rect.left + (rect.width / 2) - (tooltipRect.width / 2);
+
+        // Boundary Checks
+        if (top < 10) top = rect.bottom + 10; // Flip to bottom if no space top
+        if (left < 10) left = 10; // Left edge
+        if (left + tooltipRect.width > window.innerWidth - 10) {
+            left = window.innerWidth - tooltipRect.width - 10; // Right edge
+        }
+
+        globalTooltip.style.top = `${top}px`;
+        globalTooltip.style.left = `${left}px`;
+    }
+}
+
+function hideGlobalTooltip() {
+    if (!globalTooltip) return;
+
+    // Small delay
+    globalTooltipTimeout = setTimeout(() => {
+        if (!isHoveringGlobalTooltip) {
+            globalTooltip.classList.remove('visible');
+            setTimeout(() => globalTooltip.classList.add('hidden'), 200);
+        }
+    }, 300);
+}
+
+function initGlobalTooltip() {
+    // Create tooltip element if not exists
+    if (!document.getElementById('global-tooltip')) {
+        globalTooltip = document.createElement('div');
+        globalTooltip.id = 'global-tooltip';
+        globalTooltip.className = 'global-tooltip hidden';
+        document.body.appendChild(globalTooltip);
+
+        // Keep tooltip open when hovering over IT
+        globalTooltip.addEventListener('mouseenter', () => {
+            isHoveringGlobalTooltip = true;
+            clearTimeout(globalTooltipTimeout);
+        });
+        globalTooltip.addEventListener('mouseleave', () => {
+            isHoveringGlobalTooltip = false;
+            hideGlobalTooltip();
+        });
+    } else {
+        globalTooltip = document.getElementById('global-tooltip');
+    }
+
+    // Keep Event Delegation as Backup
+    document.addEventListener('mouseover', (e) => {
+        const el = e.target.nodeType === 3 ? e.target.parentElement : e.target;
+        const target = el.closest('.word-highlight');
+        if (target) showGlobalTooltip(target);
     });
 
     document.addEventListener('mouseout', (e) => {
-        const target = e.target.closest('.word-highlight');
-        const tooltipTarget = e.target.closest('.global-tooltip');
-
-        if (target || tooltipTarget) {
-            if (tooltipTarget) isHoveringTooltip = false;
-
-            // Small delay to allow moving between highlight and tooltip
-            tooltipTimeout = setTimeout(() => {
-                if (!isHoveringTooltip) {
-                    tooltip.classList.remove('visible');
-                    setTimeout(() => tooltip.classList.add('hidden'), 200);
-                }
-            }, 300);
-        }
+        const el = e.target.nodeType === 3 ? e.target.parentElement : e.target;
+        const target = el.closest('.word-highlight');
+        if (target) hideGlobalTooltip();
     });
 }
 
@@ -2532,43 +2583,69 @@ function deleteInlineNote(segmentId, startOffset) {
     const segment = transcriptSegments.find(s => s.id === segmentId);
     if (!segment) return;
 
-    // Handle HTML Mode
+    console.log(`Deleting note: Segment ${segmentId}, Offset ${startOffset}`);
+
+    // Robustly handle startOffset type (can be string from dataset or number from model)
+    const offsetVal = parseInt(startOffset, 10);
+
+    // 1. Update Model (Always do this)
+    if (segment.highlights) {
+        // Find by loose equality to handle string/number mismatch
+        const index = segment.highlights.findIndex(h => h.start == offsetVal);
+        if (index > -1) {
+            segment.highlights.splice(index, 1);
+            console.log('Removed from model highlights');
+        } else {
+            console.warn('Could not find highlight in model to delete');
+        }
+    }
+
+    // 2. Update HTML (If present)
     if (segment.html) {
-        // We need to remove the <mark> from the HTML string.
-        // Easiest is to parse it, find the element, unwrap it, and serialize back.
         const parser = new DOMParser();
         const doc = parser.parseFromString(segment.html, 'text/html');
-        // Select by attribute
-        const mark = doc.querySelector(`.word - highlight[data - highlight - start="${startOffset}"]`);
+
+        // Correct selector syntax: remove spaces around attributes
+        // And handle potentially slightly different attribute values (string vs number)
+        let mark = doc.querySelector(`.word-highlight[data-highlight-start="${offsetVal}"]`);
+
+        // Fallback: Try string version if number didn't match
+        if (!mark) {
+            mark = doc.querySelector(`.word-highlight[data-highlight-start="${startOffset}"]`);
+        }
 
         if (mark) {
             const textContent = doc.createTextNode(mark.textContent);
             mark.parentNode.replaceChild(textContent, mark);
-            segment.html = doc.body.innerHTML; // Get the content back
+            segment.html = doc.body.innerHTML;
+            segment.text = doc.body.textContent; // Sync text text
+            console.log('Removed from HTML');
+        } else {
+            // New Fallback: If we have HTML but can't find the mark (maybe Live mode artifact),
+            // and we successfully removed it from the model above,
+            // we should just REGENERATE the HTML from the text + highlights model.
+            // This is safer than leaving a "ghost" highlight in the HTML.
+            console.log('Mark not found in HTML, regenerating from model...');
+            segment.html = ''; // Force regeneration in createReviewSegmentElement or renderReview logic if we were calling it directly
+            // But here we just leave it empty so the next render step rebuilds it? 
+            // Ideally we manually rebuild it here if we want to be safe, but clearing it 
+            // forces the render logic to fall back to the text+highlights model.
+            // HOWEVER, we need to be careful not to lose other rich text changes. 
+            // If this was a "Live" transcript, it might not have other rich text yet.
 
-            // Also update the array for consistency
-            if (segment.highlights) {
-                const index = segment.highlights.findIndex(h => h.start == startOffset);
-                if (index > -1) segment.highlights.splice(index, 1);
-            }
-
-            pushToReviewHistory();
-            renderReview();
-            showToast('Note removed');
-            return;
+            // Smart strategy: If it was legacy/Live note, strict HTML might not match.
+            // If we found and removed it from highlights model, we can trust the render loop
+            // to rebuild it correctly IF we clear the potentially stale HTML.
+            // BUT, only clear HTML if we think it's "safe" (no edits).
+            // For now, let's trust that if the selector failed, the HTML might be out of sync 
+            // or the attribute was missing. 
         }
     }
 
-    // Fallback Legacy Mode (Pre-Rich Text)
-    if (segment.highlights) {
-        const index = segment.highlights.findIndex(h => h.start == startOffset);
-        if (index > -1) {
-            segment.highlights.splice(index, 1);
-            pushToReviewHistory();
-            renderReview();
-            showToast('Note removed');
-        }
-    }
+    // 3. Re-render
+    pushToReviewHistory();
+    renderReview(); // This triggers the full re-render which handles the fallback if html is cleared/updated
+    showToast('Note removed');
 }
 
 // ============================================================================
@@ -2974,10 +3051,10 @@ async function downloadTranscriptAsPDF() {
 
         // Process Inline Notes: Make them visible text for PDF
         feedClone.querySelectorAll('.word-highlight').forEach(highlight => {
-            // Force Highlight Color (CSS vars might fail in PDF)
-            highlight.style.backgroundColor = '#ffedd5';
+            // Start fresh with no highlight for PDF readability
+            highlight.style.backgroundColor = 'transparent';
             highlight.style.textDecoration = 'none';
-            highlight.style.borderBottom = '2px solid #ea580c';
+            highlight.style.borderBottom = 'none'; // Removing the orange underline
             highlight.style.color = 'inherit';
 
             const noteText = highlight.getAttribute('data-note');
@@ -3535,6 +3612,17 @@ function createReviewSegmentElement(segment) {
     }
 
     textSpan.innerHTML = html;
+
+    // Explicitly attach tooltip listeners to bypass any contenteditable/delegation issues
+    textSpan.querySelectorAll('.word-highlight').forEach(mark => {
+        mark.style.pointerEvents = 'all'; // Force pointer events
+        mark.addEventListener('mouseenter', (e) => {
+            if (typeof showGlobalTooltip === 'function') showGlobalTooltip(e.target);
+        });
+        mark.addEventListener('mouseleave', (e) => {
+            if (typeof hideGlobalTooltip === 'function') hideGlobalTooltip();
+        });
+    });
 
     // Handle Enter key to create new paragraphs
     if (reviewEditMode) {
