@@ -397,6 +397,40 @@ body.fullscreen-active #interviewDetailView {
     background: var(--bg-app);
 }
 
+.btn-secondary.small {
+    padding: 0 1rem;
+    height: 32px;
+    border-radius: 16px;
+    font-size: 0.8rem;
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+}
+
+/* Speaker switch button - Participant state */
+#switchSpeakerBtn.participant {
+    background: #1e40af;
+    color: white;
+    border-color: #1e40af;
+}
+
+#switchSpeakerBtn.participant:hover {
+    background: #1e3a8a;
+    border-color: #1e3a8a;
+}
+
+/* Speaker switch button - always solid filled */
+#switchSpeakerBtn {
+    background: #1e40af;
+    color: white;
+    border-color: #1e40af;
+}
+
+#switchSpeakerBtn:hover:not(:disabled) {
+    background: #1e3a8a;
+    border-color: #1e3a8a;
+}
+
 /* Projects Grid - Glassy Cards */
 .projects-grid {
     display: grid;
@@ -571,10 +605,50 @@ body.fullscreen-active #interviewDetailView {
     border-radius: var(--radius-xl);
     width: 90%;
     max-width: 500px;
+    max-height: 90vh;
+    overflow-y: auto;
     box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
-    overflow: hidden;
     animation: slideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1);
     font-family: var(--font-heading);
+}
+
+@media (max-width: 768px) {
+    .modal-container {
+        width: 95%;
+        max-width: none;
+        border-radius: var(--radius-lg);
+    }
+
+    .modal-header {
+        padding: 1.5rem 1.5rem 1rem;
+    }
+
+    .modal-header h2 {
+        font-size: 1.25rem;
+    }
+
+    .modal-body {
+        padding: 1.5rem;
+    }
+
+    .input-group {
+        margin-bottom: 1.25rem;
+    }
+
+    .input-group label {
+        margin-bottom: 0.5rem;
+        font-size: 0.9rem;
+    }
+
+    .input-group input,
+    .input-group select {
+        padding: 0.75rem;
+        font-size: 1rem;
+    }
+
+    .modal-footer {
+        padding: 1rem 1.5rem;
+    }
 }
 
 .modal-header {
@@ -1148,6 +1222,151 @@ body.fullscreen-active #interviewDetailView {
     gap: 0.75rem;
 }
 
+.transcription-header {
+    padding: 1rem 1.5rem;
+    background: #f8fafc;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.recording-controls {
+    display: flex;
+    gap: 0.75rem;
+    align-items: center;
+}
+
+/* Responsiveness for small laptops */
+@media (max-width: 1400px) {
+    .transcription-header {
+        padding: 0.75rem 1.25rem;
+    }
+
+    .record-btn {
+        padding: 0 0.5rem;
+        height: 28px;
+        font-size: 0.7rem;
+        gap: 0.3rem;
+    }
+
+    .record-btn svg {
+        width: 16px;
+        height: 16px;
+    }
+
+    .btn-secondary.small {
+        padding: 0 0.6rem !important;
+        height: 28px !important;
+        font-size: 0.7rem !important;
+    }
+
+    .btn-secondary.small svg {
+        width: 14px;
+        height: 14px;
+    }
+
+    .recording-controls {
+        gap: 0.5rem;
+    }
+
+    .speaker-toggle-container {
+        margin-left: 0;
+        padding-left: 0;
+        gap: 0.5rem;
+    }
+
+    /* Show the 'Speaker recognition' text but smaller on small screens */
+    .speaker-toggle-container span {
+        font-size: 0.65rem;
+    }
+
+    .lang-select {
+        margin-left: 0;
+        padding: 0.15rem 0.4rem;
+        font-size: 0.7rem;
+    }
+
+    .timer-display {
+        padding: 0.2rem 0.5rem;
+        font-size: 0.75rem;
+        min-width: 55px;
+        font-weight: 600;
+    }
+
+    #recordingStatus {
+        font-size: 0.8rem;
+    }
+
+    .transcription-card {
+        gap: 0.5rem;
+    }
+
+    /* Make header more compact on small screens */
+    .detail-header {
+        margin-bottom: 1rem;
+        padding-bottom: 0.5rem;
+    }
+
+    .detail-header h1 {
+        font-size: 1.25rem !important;
+    }
+
+    #interviewDetailTitle {
+        font-size: 1.25rem;
+    }
+
+    .back-btn {
+        width: 32px;
+        height: 32px;
+    }
+
+    .back-btn svg {
+        width: 20px;
+        height: 20px;
+    }
+
+    .header-left {
+        gap: 0.75rem;
+    }
+
+    .header-right .record-btn {
+        padding: 0 0.6rem;
+        height: 28px;
+        font-size: 0.7rem;
+    }
+
+    .sidebar-header {
+        padding: 1rem;
+    }
+
+    .sidebar-content {
+        padding: 1rem;
+    }
+
+    .guideline-q-item {
+        padding: 0.75rem;
+        font-size: 0.95rem;
+        gap: 0.75rem;
+        margin-bottom: 0.5rem;
+    }
+
+    .notes-panel {
+        padding: 0.75rem;
+        gap: 0.5rem;
+    }
+
+    .notes-input-wrapper {
+        gap: 0.75rem;
+    }
+
+    .notes-input-wrapper textarea {
+        min-height: 50px;
+        padding: 0.6rem;
+        font-size: 0.85rem;
+    }
+}
+
 .status-indicator {
     width: 10px;
     height: 10px;
@@ -1219,16 +1438,15 @@ body.fullscreen-active #interviewDetailView {
 }
 
 .btn-start {
-    background: #1e40af;
-    /* Participant Blue */
+    background: var(--brand-primary);
     color: white;
-    box-shadow: 0 4px 6px -1px rgba(30, 64, 175, 0.3);
+    box-shadow: 0 4px 6px -1px rgba(234, 88, 12, 0.3);
 }
 
 .btn-pause {
-    background: #1e40af;
-    /* Participant Blue */
+    background: var(--brand-primary);
     color: white;
+    box-shadow: 0 4px 6px -1px rgba(234, 88, 12, 0.3);
 }
 
 #submitGeneralNoteBtn {
@@ -1250,6 +1468,9 @@ body.fullscreen-active #interviewDetailView {
     /* Red 500 */
     color: white;
     box-shadow: 0 4px 6px -1px rgba(239, 68, 68, 0.2);
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
 }
 
 .record-btn:hover:not(:disabled) {
@@ -1309,8 +1530,6 @@ body.fullscreen-active #interviewDetailView {
     align-items: center;
     gap: 0.5rem;
     margin-left: 1rem;
-    padding-left: 1rem;
-    border-left: 1px solid rgba(0, 0, 0, 0.05);
 }
 
 .speaker-toggle-container span {
@@ -1548,7 +1767,7 @@ input:checked+.slider:before {
 
 /* Inline Note Popdown - Premium Glassy */
 #inlineNotePopdown {
-    position: absolute;
+    position: fixed;
     background: rgba(255, 255, 255, 0.9);
     backdrop-filter: blur(12px);
     -webkit-backdrop-filter: blur(12px);

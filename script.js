@@ -1491,7 +1491,7 @@ async function loadInterviewView(interviewId) {
     if (interviewDetailView) interviewDetailView.classList.remove('hidden');
 
     if (interviewDetailTitle) interviewDetailTitle.textContent = 'Loading...';
-    if (transcriptionFeed) transcriptionFeed.innerHTML = '<p style="text-align: center; color: var(--text-muted); margin-top: 2rem; user-select: none; -webkit-user-select: none;">Click the green button to start the interview transcription.</p>';
+    if (transcriptionFeed) transcriptionFeed.innerHTML = '<p style="text-align: center; color: var(--text-muted); margin-top: 2rem; user-select: none; -webkit-user-select: none;">Click the orange button to start the interview transcription.</p>';
     if (recordingTimer) recordingTimer.textContent = '00:00';
     if (recordingStatus) {
         recordingStatus.textContent = 'Ready';
@@ -1520,7 +1520,7 @@ async function loadInterviewView(interviewId) {
         startRecordingBtn.classList.add('btn-start');
         startRecordingBtn.querySelector('span').textContent = 'Start Recording';
         startRecordingBtn.querySelector('svg').innerHTML = `
-                < circle cx = "12" cy = "12" r = "10" ></circle >
+                <circle cx="12" cy="12" r="10"></circle>
                     <circle cx="12" cy="12" r="3" fill="currentColor"></circle>
             `;
     }
@@ -1556,7 +1556,7 @@ async function loadInterviewView(interviewId) {
 
                     if (fullGuideline && fullGuideline.questions) {
                         workspaceQuestionsList.innerHTML = fullGuideline.questions.map(q => `
-                < div class="guideline-q-item" onclick = "toggleGuidelineQuestion(this)" >
+                <div class="guideline-q-item" onclick="toggleGuidelineQuestion(this)">
                                 <div class="q-checkbox"></div>
                                 <div class="q-content">
                                     <span class="q-text">${escapeHtml(cleanQuestionText(q.text))}</span>
@@ -1566,7 +1566,7 @@ async function loadInterviewView(interviewId) {
                                         </ul>
                                     ` : ''}
                                 </div>
-                            </div >
+                            </div>
                 `).join('');
                     } else {
                         workspaceQuestionsList.innerHTML = '<p style="color: var(--text-muted);">No questions found.</p>';
@@ -1708,7 +1708,7 @@ async function startInterview() {
     startRecordingBtn.classList.add('btn-pause');
     startRecordingBtn.querySelector('span').textContent = 'Pause';
     startRecordingBtn.querySelector('svg').innerHTML = `
-                < rect x = "6" y = "4" width = "4" height = "16" ></rect >
+                <rect x="6" y="4" width="4" height="16"></rect>
                     <rect x="14" y="4" width="4" height="16"></rect>
             `;
 
@@ -1758,7 +1758,7 @@ function pauseInterview() {
     startRecordingBtn.classList.add('btn-start');
     startRecordingBtn.querySelector('span').textContent = 'Continue Recording';
     startRecordingBtn.querySelector('svg').innerHTML = `
-                < circle cx = "12" cy = "12" r = "10" ></circle >
+                <circle cx="12" cy="12" r="10"></circle>
                     <circle cx="12" cy="12" r="3" fill="currentColor"></circle>
             `;
 
@@ -1777,7 +1777,7 @@ function resumeInterview() {
     startRecordingBtn.classList.add('btn-pause');
     startRecordingBtn.querySelector('span').textContent = 'Pause';
     startRecordingBtn.querySelector('svg').innerHTML = `
-                < rect x = "6" y = "4" width = "4" height = "16" ></rect >
+                <rect x="6" y="4" width="4" height="16"></rect>
                     <rect x="14" y="4" width="4" height="16"></rect>
             `;
 
@@ -2043,7 +2043,7 @@ function addTranscriptSegment(text) {
         }
 
         const label = document.createElement('span');
-        label.className = `speaker - label ${currentSpeaker} `;
+        label.className = `speaker-label ${currentSpeaker}`;
         label.textContent = currentSpeaker === 'interviewer' ? 'Interviewer' : 'Participant';
         transcriptionFeed.appendChild(label);
 
@@ -2144,7 +2144,7 @@ function updateSegmentContent(el, segment) {
 
         // Safe append highlighted text
         const chunk = text.substring(h.start, h.end);
-        html += `< mark class="word-highlight" data - segment - id="${segment.id}" data - highlight - start="${h.start}" data - note="${escapeHtml(h.note || '')}" > ${escapeHtml(chunk)}</mark > `;
+        html += `<mark class="word-highlight" data-segment-id="${segment.id}" data-highlight-start="${h.start}" data-note="${escapeHtml(h.note || '')}">${escapeHtml(chunk)}</mark>`;
 
         lastIndex = h.end;
     });
@@ -2241,8 +2241,9 @@ function handleTextSelection(e, segmentId) {
                 };
 
                 // Show Popdown using captured rect
-                inlineNotePopdown.style.left = `${rect.left} px`;
-                inlineNotePopdown.style.top = `${rect.top - 50 + window.scrollY} px`;
+                inlineNotePopdown.style.position = 'fixed';
+                inlineNotePopdown.style.left = `${rect.left}px`;
+                inlineNotePopdown.style.top = `${rect.bottom + 10}px`;
                 inlineNotePopdown.classList.remove('hidden'); // CRITICAL FIX: Ensure this is removed
                 inlineNoteInput.focus();
             }
@@ -2320,8 +2321,9 @@ function handleTextSelection(e, segmentId) {
                 console.warn('Could not wrap selection in mark:', err);
             }
 
-            inlineNotePopdown.style.left = `${rect.left} px`;
-            inlineNotePopdown.style.top = `${rect.top - 50 + window.scrollY} px`;
+            inlineNotePopdown.style.position = 'fixed';
+            inlineNotePopdown.style.left = `${rect.left}px`;
+            inlineNotePopdown.style.top = `${rect.bottom + 10}px`;
             inlineNotePopdown.classList.remove('hidden');
             inlineNoteInput.focus();
         }
@@ -3269,6 +3271,9 @@ document.addEventListener('mouseup', (e) => {
                 };
                 selectedSegmentId = segmentId;
 
+                // Get rect BEFORE modifying the range
+                const rect = range.getBoundingClientRect();
+
                 // Visually highlight immediately
                 const mark = document.createElement('mark');
                 mark.className = 'word-highlight';
@@ -3279,10 +3284,10 @@ document.addEventListener('mouseup', (e) => {
                     console.warn('Could not wrap selection in mark:', err);
                 }
 
-                // Show popdown
-                const rect = range.getBoundingClientRect();
-                inlineNotePopdown.style.top = `${window.scrollY + rect.bottom + 10} px`;
-                inlineNotePopdown.style.left = `${window.scrollX + rect.left} px`;
+                // Show popdown - use fixed positioning relative to viewport
+                inlineNotePopdown.style.position = 'fixed';
+                inlineNotePopdown.style.top = `${rect.bottom + 10}px`;
+                inlineNotePopdown.style.left = `${rect.left}px`;
                 inlineNotePopdown.classList.remove('hidden');
 
                 setTimeout(() => inlineNoteInput.focus(), 50);
@@ -3480,7 +3485,7 @@ function createReviewSegmentElement(segment) {
 
                     // Focus the new segment
                     setTimeout(() => {
-                        const newEl = document.querySelector(`[data - segment - id="${newSegment.id}"]span[contenteditable = "true"]`);
+                        const newEl = document.querySelector(`[data-segment-id="${newSegment.id}"] span[contenteditable="true"]`);
                         if (newEl) {
                             newEl.focus();
                             const newRange = document.createRange();
@@ -3545,7 +3550,7 @@ function createReviewSegmentElement(segment) {
 
                             // Focus at the merge point
                             setTimeout(() => {
-                                const prevElSpan = document.querySelector(`[data - segment - id= "${prevId}"]span[contenteditable = "true"]`);
+                                const prevElSpan = document.querySelector(`[data-segment-id="${prevId}"] span[contenteditable="true"]`);
                                 if (prevElSpan) {
                                     prevElSpan.focus();
                                     const newRange = document.createRange();
