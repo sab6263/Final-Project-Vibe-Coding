@@ -1302,25 +1302,32 @@ async function renderInterviewsList(projectId) {
         }
 
         list.className = 'list-container';
-        list.innerHTML = interviews.map(i => `
+        list.innerHTML = interviews.map(i => {
+            const isDone = i.status === 'completed' || i.status === 'finalized';
+            const statusBadge = isDone
+                ? `<span style="font-size: 0.7rem; color: #1e40af; border: 1px solid #1e40af; padding: 0.15rem 0.5rem; border-radius: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.02em;">Done</span>`
+                : `<span style="font-size: 0.7rem; color: #94a3b8; border: 1px solid #cbd5e1; padding: 0.15rem 0.5rem; border-radius: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.02em;">Planned</span>`;
+
+            return `
             <div class="card-item-row" onclick="handleInterviewClick('${i.id}', '${i.status}')" style="cursor: pointer; padding: 1rem; background: rgba(255,255,255,0.6); border-radius: var(--radius-md); border: 1px solid rgba(0,0,0,0.05); margin-bottom: 0.5rem; display: flex; justify-content: space-between; align-items: center; transition: all 0.2s;">
                 <div>
                     <div style="font-weight: 600; color: var(--text-title);">${escapeHtml(i.title)}</div>
                     ${i.participant ? `<div style="font-size: 0.85rem; color: var(--text-muted); margin-top: 0.25rem;">Participant: ${escapeHtml(i.participant)}</div>` : ''}
                 </div>
                 <div style="display: flex; align-items: center; gap: 0.75rem;">
+                     ${statusBadge}
                     <span style="font-size: 0.85rem; color: var(--text-muted);">
                         ${i.createdAt ? new Date(i.createdAt.toMillis()).toLocaleDateString() : 'Just now'}
                     </span>
-                    <button class="delete-item-btn" onclick="deleteInterview(event, '${i.id}', '${projectId}')" style="padding: 0.25rem;">
+                    <button class="delete-item-btn" onclick="deleteInterview(event, '${i.id}', '${escapeHtml(i.projectId || currentProjectId)}')" style="padding: 0.25rem;">
                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                             <polyline points="3 6 5 6 21 6"></polyline>
                             <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
                         </svg>
                     </button>
                 </div>
-            </div>
-        `).join('');
+            </div >
+                `}).join('');
     } catch (error) {
         console.error('Error rendering interviews list:', error);
         list.innerHTML = '<p style="text-align: center; color: var(--brand-primary); padding: 1rem;">Error loading interviews</p>';
@@ -1491,9 +1498,9 @@ async function loadInterviewView(interviewId) {
         startRecordingBtn.classList.add('btn-start');
         startRecordingBtn.querySelector('span').textContent = 'Start Recording';
         startRecordingBtn.querySelector('svg').innerHTML = `
-            <circle cx="12" cy="12" r="10"></circle>
-            <circle cx="12" cy="12" r="3" fill="currentColor"></circle>
-        `;
+                < circle cx = "12" cy = "12" r = "10" ></circle >
+                    <circle cx="12" cy="12" r="3" fill="currentColor"></circle>
+            `;
     }
     if (stopRecordingBtn) stopRecordingBtn.disabled = true;
     if (recordingStatus) {
@@ -1527,7 +1534,7 @@ async function loadInterviewView(interviewId) {
 
                     if (fullGuideline && fullGuideline.questions) {
                         workspaceQuestionsList.innerHTML = fullGuideline.questions.map(q => `
-                            <div class="guideline-q-item" onclick="toggleGuidelineQuestion(this)">
+                < div class="guideline-q-item" onclick = "toggleGuidelineQuestion(this)" >
                                 <div class="q-checkbox"></div>
                                 <div class="q-content">
                                     <span class="q-text">${escapeHtml(cleanQuestionText(q.text))}</span>
@@ -1537,8 +1544,8 @@ async function loadInterviewView(interviewId) {
                                         </ul>
                                     ` : ''}
                                 </div>
-                            </div>
-                        `).join('');
+                            </div >
+                `).join('');
                     } else {
                         workspaceQuestionsList.innerHTML = '<p style="color: var(--text-muted);">No questions found.</p>';
                     }
@@ -1679,9 +1686,9 @@ async function startInterview() {
     startRecordingBtn.classList.add('btn-pause');
     startRecordingBtn.querySelector('span').textContent = 'Pause';
     startRecordingBtn.querySelector('svg').innerHTML = `
-        <rect x="6" y="4" width="4" height="16"></rect>
-        <rect x="14" y="4" width="4" height="16"></rect>
-    `;
+                < rect x = "6" y = "4" width = "4" height = "16" ></rect >
+                    <rect x="14" y="4" width="4" height="16"></rect>
+            `;
 
     stopRecordingBtn.disabled = false;
     if (switchSpeakerBtn) {
@@ -1729,9 +1736,9 @@ function pauseInterview() {
     startRecordingBtn.classList.add('btn-start');
     startRecordingBtn.querySelector('span').textContent = 'Continue Recording';
     startRecordingBtn.querySelector('svg').innerHTML = `
-        <circle cx="12" cy="12" r="10"></circle>
-        <circle cx="12" cy="12" r="3" fill="currentColor"></circle>
-    `;
+                < circle cx = "12" cy = "12" r = "10" ></circle >
+                    <circle cx="12" cy="12" r="3" fill="currentColor"></circle>
+            `;
 
     recordingStatus.textContent = 'Paused';
     recordingStatus.parentElement.classList.remove('active');
@@ -1748,9 +1755,9 @@ function resumeInterview() {
     startRecordingBtn.classList.add('btn-pause');
     startRecordingBtn.querySelector('span').textContent = 'Pause';
     startRecordingBtn.querySelector('svg').innerHTML = `
-        <rect x="6" y="4" width="4" height="16"></rect>
-        <rect x="14" y="4" width="4" height="16"></rect>
-    `;
+                < rect x = "6" y = "4" width = "4" height = "16" ></rect >
+                    <rect x="14" y="4" width="4" height="16"></rect>
+            `;
 
     recordingStatus.textContent = 'Recording...';
     recordingStatus.parentElement.classList.add('active');
@@ -1868,7 +1875,7 @@ function startTimer() {
         const totalSeconds = Math.floor(diff / 1000);
         const mins = Math.floor(totalSeconds / 60).toString().padStart(2, '0');
         const secs = (totalSeconds % 60).toString().padStart(2, '0');
-        recordingTimer.textContent = `${mins}:${secs}`;
+        recordingTimer.textContent = `${mins}:${secs} `;
     }, 1000);
 }
 
@@ -2014,7 +2021,7 @@ function addTranscriptSegment(text) {
         }
 
         const label = document.createElement('span');
-        label.className = `speaker-label ${currentSpeaker}`;
+        label.className = `speaker - label ${currentSpeaker} `;
         label.textContent = currentSpeaker === 'interviewer' ? 'Interviewer' : 'Participant';
         transcriptionFeed.appendChild(label);
 
@@ -2115,7 +2122,7 @@ function updateSegmentContent(el, segment) {
 
         // Safe append highlighted text
         const chunk = text.substring(h.start, h.end);
-        html += `<mark class="word-highlight" data-segment-id="${segment.id}" data-highlight-start="${h.start}" data-note="${escapeHtml(h.note || '')}">${escapeHtml(chunk)}</mark>`;
+        html += `< mark class="word-highlight" data - segment - id="${segment.id}" data - highlight - start="${h.start}" data - note="${escapeHtml(h.note || '')}" > ${escapeHtml(chunk)}</mark > `;
 
         lastIndex = h.end;
     });
@@ -2212,8 +2219,8 @@ function handleTextSelection(e, segmentId) {
                 };
 
                 // Show Popdown using captured rect
-                inlineNotePopdown.style.left = `${rect.left}px`;
-                inlineNotePopdown.style.top = `${rect.top - 50 + window.scrollY}px`;
+                inlineNotePopdown.style.left = `${rect.left} px`;
+                inlineNotePopdown.style.top = `${rect.top - 50 + window.scrollY} px`;
                 inlineNotePopdown.classList.remove('hidden'); // CRITICAL FIX: Ensure this is removed
                 inlineNoteInput.focus();
             }
@@ -2291,8 +2298,8 @@ function handleTextSelection(e, segmentId) {
                 console.warn('Could not wrap selection in mark:', err);
             }
 
-            inlineNotePopdown.style.left = `${rect.left}px`;
-            inlineNotePopdown.style.top = `${rect.top - 50 + window.scrollY}px`;
+            inlineNotePopdown.style.left = `${rect.left} px`;
+            inlineNotePopdown.style.top = `${rect.top - 50 + window.scrollY} px`;
             inlineNotePopdown.classList.remove('hidden');
             inlineNoteInput.focus();
         }
@@ -2363,9 +2370,9 @@ function initGlobalTooltip() {
                 const highlightStart = target.dataset.highlightStart;
 
                 tooltip.innerHTML = `
-                    <span>${escapeHtml(note)}</span>
+                < span > ${escapeHtml(note)}</span >
                     <button class="tooltip-delete-btn" title="Remove Note">✕</button>
-                `;
+            `;
 
                 const deleteBtn = tooltip.querySelector('.tooltip-delete-btn');
                 if (deleteBtn) {
@@ -2404,8 +2411,8 @@ function initGlobalTooltip() {
                     tooltip.classList.remove('bottom-oriented');
                 }
 
-                tooltip.style.top = `${top}px`;
-                tooltip.style.left = `${left}px`;
+                tooltip.style.top = `${top} px`;
+                tooltip.style.left = `${left} px`;
             }
         } else if (e.target.closest('.global-tooltip')) {
             isHoveringTooltip = true;
@@ -2447,7 +2454,7 @@ function deleteInlineNote(segmentId, startOffset) {
         const parser = new DOMParser();
         const doc = parser.parseFromString(segment.html, 'text/html');
         // Select by attribute
-        const mark = doc.querySelector(`.word-highlight[data-highlight-start="${startOffset}"]`);
+        const mark = doc.querySelector(`.word - highlight[data - highlight - start="${startOffset}"]`);
 
         if (mark) {
             const textContent = doc.createTextNode(mark.textContent);
@@ -2815,7 +2822,7 @@ async function downloadTranscriptAsPDF() {
         const sessionTitle = document.getElementById('reviewProjectName')?.textContent || 'Interview-Transcript';
         const opt = {
             margin: [15, 15],
-            filename: `${sessionTitle.replace(/\s+/g, '-').toLowerCase()}-${Date.now()}.pdf`,
+            filename: `${sessionTitle.replace(/\s+/g, '-').toLowerCase()} -${Date.now()}.pdf`,
             image: { type: 'jpeg', quality: 0.98 },
             html2canvas: { scale: 2, useCORS: true, letterRendering: true },
             jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
@@ -2824,11 +2831,11 @@ async function downloadTranscriptAsPDF() {
 
         // Add a header for the PDF
         const headerHtml = `
-            <div style="font-family: Inter, sans-serif; padding-bottom: 20px; border-bottom: 2px solid #eee; margin-bottom: 30px;">
+                < div style = "font-family: Inter, sans-serif; padding-bottom: 20px; border-bottom: 2px solid #eee; margin-bottom: 30px;" >
                 <h1 style="color: #1a202c; margin: 0; font-size: 24px;">${sessionTitle}</h1>
                 <p style="color: #718096; margin: 5px 0 0 0; font-size: 14px;">Transcript Exported from Contexture</p>
-            </div>
-        `;
+            </div >
+                `;
 
         // Create a clone for the PDF to add the header without affecting the real UI
         const container = document.createElement('div');
@@ -2845,20 +2852,64 @@ async function downloadTranscriptAsPDF() {
 
         // Process Inline Notes: Make them visible text for PDF
         feedClone.querySelectorAll('.word-highlight').forEach(highlight => {
+            // Force Highlight Color (CSS vars might fail in PDF)
+            highlight.style.backgroundColor = '#ffedd5';
+            highlight.style.textDecoration = 'none';
+            highlight.style.borderBottom = '2px solid #ea580c';
+            highlight.style.color = 'inherit';
+
             const noteText = highlight.getAttribute('data-note');
             if (noteText) {
                 // Create a visible span for the note
                 const noteSpan = document.createElement('span');
-                noteSpan.textContent = ` [Note: ${noteText}]`;
-                noteSpan.style.fontSize = '0.8em';
-                noteSpan.style.color = '#64748b'; // Muted text
-                noteSpan.style.fontStyle = 'italic';
-                noteSpan.style.fontWeight = 'normal';
+                noteSpan.innerHTML = ` < span style = "color: #64748b; font-size: 0.8em; font-weight: 700;" > [Note: ${noteText}]</span > `;
 
                 // insertAfter the highlight
-                highlight.parentNode.insertBefore(noteSpan, highlight.nextSibling);
+                if (highlight.nextSibling) {
+                    highlight.parentNode.insertBefore(noteSpan, highlight.nextSibling);
+                } else {
+                    highlight.parentNode.appendChild(noteSpan);
+                }
             }
         });
+
+        // Fix Spacing and Layout for PDF
+        // html2canvas struggles with complex flexbox. We simplify.
+        feedClone.querySelectorAll('.review-segment').forEach(seg => {
+            seg.style.display = 'flex';
+            seg.style.alignItems = 'flex-start'; // Top align important for long text
+            seg.style.gap = '15px'; // Explicit gap
+            seg.style.marginBottom = '10px'; // Explicit margin
+            seg.style.pageBreakInside = 'avoid';
+
+            // Fix Speaker Label
+            const label = seg.querySelector('.speaker-label');
+            if (label) {
+                label.style.minWidth = '80px'; // Ensure badge doesn't squish
+                label.style.height = 'auto';
+                label.style.alignSelf = 'flex-start';
+                label.style.marginTop = '4px'; // Align with text baseline
+
+                // Hardcode colors
+                if (label.classList.contains('interviewer')) {
+                    label.style.backgroundColor = '#f1f5f9';
+                    label.style.color = '#64748b';
+                } else {
+                    label.style.backgroundColor = '#1e40af';
+                    label.style.color = 'white';
+                }
+            }
+
+            // Fix Text Area
+            const textField = seg.querySelector('[contenteditable]');
+            if (textField) {
+                textField.style.flex = '1';
+                textField.style.whiteSpace = 'pre-wrap';
+                textField.style.textAlign = 'left';
+            }
+        });
+
+        feedClone.style.fontFamily = 'Inter, sans-serif'; // Ensure font
 
         container.appendChild(feedClone);
 
@@ -3023,9 +3074,9 @@ function initDragAndDrop() {
             dragImg.style.boxShadow = '0 10px 15px -3px rgba(0, 0, 0, 0.1)';
             dragImg.style.pointerEvents = 'none';
             dragImg.innerHTML = `
-                <div class="review-note-meta" style="margin-bottom: 0.5rem; opacity: 0.7;">
+                < div class="review-note-meta" style = "margin-bottom: 0.5rem; opacity: 0.7;" >
                     <span style="font-size: 0.75rem; font-weight: 600; text-transform: uppercase;">Session Note (Placing...)</span>
-                </div>
+                </div >
                 <div style="font-size: 0.95rem; line-height: 1.5; color: var(--text-primary);">
                     ${content}
                 </div>
@@ -3208,8 +3259,8 @@ document.addEventListener('mouseup', (e) => {
 
                 // Show popdown
                 const rect = range.getBoundingClientRect();
-                inlineNotePopdown.style.top = `${window.scrollY + rect.bottom + 10}px`;
-                inlineNotePopdown.style.left = `${window.scrollX + rect.left}px`;
+                inlineNotePopdown.style.top = `${window.scrollY + rect.bottom + 10} px`;
+                inlineNotePopdown.style.left = `${window.scrollX + rect.left} px`;
                 inlineNotePopdown.classList.remove('hidden');
 
                 setTimeout(() => inlineNoteInput.focus(), 50);
@@ -3407,7 +3458,7 @@ function createReviewSegmentElement(segment) {
 
                     // Focus the new segment
                     setTimeout(() => {
-                        const newEl = document.querySelector(`[data-segment-id="${newSegment.id}"] span[contenteditable="true"]`);
+                        const newEl = document.querySelector(`[data - segment - id="${newSegment.id}"]span[contenteditable = "true"]`);
                         if (newEl) {
                             newEl.focus();
                             const newRange = document.createRange();
@@ -3472,7 +3523,7 @@ function createReviewSegmentElement(segment) {
 
                             // Focus at the merge point
                             setTimeout(() => {
-                                const prevElSpan = document.querySelector(`[data-segment-id="${prevId}"] span[contenteditable="true"]`);
+                                const prevElSpan = document.querySelector(`[data - segment - id= "${prevId}"]span[contenteditable = "true"]`);
                                 if (prevElSpan) {
                                     prevElSpan.focus();
                                     const newRange = document.createRange();
@@ -3635,7 +3686,7 @@ function createReviewNoteElement(note, index) {
     // Format timestamp relative to start
     const minutes = Math.floor(note.timestamp / 60000);
     const seconds = Math.floor((note.timestamp % 60000) / 1000);
-    const timeStr = `${minutes}:${seconds.toString().padStart(2, '0')}`;
+    const timeStr = `${minutes}:${seconds.toString().padStart(2, '0')} `;
 
     const timestampSpan = document.createElement('span');
 
@@ -3686,7 +3737,7 @@ function createReviewNoteElement(note, index) {
         div.appendChild(actions); // Append actions directly to card, ignoring meta
     } else {
         // Standard Session Note
-        timestampSpan.textContent = `Session Note at ${timeStr}`;
+        timestampSpan.textContent = `Session Note at ${timeStr} `;
         meta.appendChild(timestampSpan);
         meta.appendChild(actions);
         div.appendChild(meta);
