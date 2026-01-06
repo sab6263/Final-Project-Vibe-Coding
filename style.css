@@ -480,7 +480,9 @@ body.fullscreen-active #interviewDetailView {
     box-shadow: 0 0 10px rgba(234, 88, 12, 0.1);
 }
 
-.status-badge.inactive {
+.status-badge.inactive,
+.status-badge.planned,
+.status-badge.done {
     background: var(--status-inactive-bg);
     color: var(--text-muted);
     border: 1px solid var(--border-light);
@@ -973,9 +975,18 @@ body.fullscreen-active #interviewDetailView {
     /* Allow menu to spill out */
 }
 
-/* Ensure card doesn't clip menu */
+/* Ensure card doesn't clip menu and has high stacking order when open */
 .project-card {
     overflow: visible;
+    position: relative;
+    /* Ensure it has a base for z-index */
+    z-index: 1;
+    /* Low base index */
+}
+
+.project-card.menu-open {
+    z-index: 100 !important;
+    /* Raise above siblings */
 }
 
 /* ============================================================================
@@ -1263,7 +1274,7 @@ body.fullscreen-active #interviewDetailView {
     padding: 1.5rem 2rem;
     background: #fff;
     font-size: 0.95rem;
-    line-height: 1.6;
+    line-height: 1.75;
     color: var(--text-body);
 }
 

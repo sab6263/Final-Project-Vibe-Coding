@@ -138,6 +138,7 @@ document.addEventListener('DOMContentLoaded', () => {
     document.addEventListener('click', (e) => {
         if (!e.target.closest('.card-menu-container')) {
             document.querySelectorAll('.card-dropdown').forEach(el => el.classList.add('hidden'));
+            document.querySelectorAll('.project-card').forEach(el => el.classList.remove('menu-open'));
         }
     });
 
@@ -515,11 +516,32 @@ async function updateCurrentProjectStatus(activate) {
 
 function toggleCardMenu(event, id) {
     event.stopPropagation();
+
+    // Close other menus
     document.querySelectorAll('.card-dropdown').forEach(el => {
         if (el.id !== `menu-${id}`) el.classList.add('hidden');
     });
+
+    // Remove menu-open from other cards
+    document.querySelectorAll('.project-card').forEach(el => {
+        const menu = el.querySelector(`#menu-${id}`);
+        if (!menu) el.classList.remove('menu-open');
+    });
+
     const menu = document.getElementById(`menu-${id}`);
-    if (menu) menu.classList.toggle('hidden');
+    const card = event.target.closest('.project-card');
+
+    if (menu) {
+        const isCurrentlyHidden = menu.classList.contains('hidden');
+        menu.classList.toggle('hidden');
+        if (card) {
+            if (isCurrentlyHidden) {
+                card.classList.add('menu-open');
+            } else {
+                card.classList.remove('menu-open');
+            }
+        }
+    }
 }
 
 async function toggleProjectStatus(event, id) {
@@ -1305,8 +1327,8 @@ async function renderInterviewsList(projectId) {
         list.innerHTML = interviews.map(i => {
             const isDone = i.status === 'completed' || i.status === 'finalized';
             const statusBadge = isDone
-                ? `<span style="font-size: 0.7rem; color: #1e40af; border: 1px solid #1e40af; padding: 0.15rem 0.5rem; border-radius: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.02em;">Done</span>`
-                : `<span style="font-size: 0.7rem; color: #94a3b8; border: 1px solid #cbd5e1; padding: 0.15rem 0.5rem; border-radius: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.02em;">Planned</span>`;
+                ? `<span class="status-badge done">Done</span>`
+                : `<span class="status-badge planned">Planned</span>`;
 
             return `
             <div class="card-item-row" onclick="handleInterviewClick('${i.id}', '${i.status}')" style="cursor: pointer; padding: 1rem; background: rgba(255,255,255,0.6); border-radius: var(--radius-md); border: 1px solid rgba(0,0,0,0.05); margin-bottom: 0.5rem; display: flex; justify-content: space-between; align-items: center; transition: all 0.2s;">
@@ -3290,12 +3312,12 @@ function createReviewSegmentElement(segment) {
 
     // Use flex for horizontal alignment and vertical centering
     div.style.display = 'flex';
-    div.style.alignItems = 'center'; // Center the badge with the text
+    div.style.alignItems = 'flex-start'; // Align to top for first-line consistency
     div.style.gap = '0.75rem';
 
-    // Default Paragraph Spacing - REDUCED for tighter flow
-    div.style.marginBottom = '0.1rem';
-    div.style.marginTop = '0';
+    // Improved spacing for better readability
+    div.style.marginBottom = '0.75rem';
+    div.style.marginTop = '0.5rem';
 
     // In edit mode, add visual boundaries
     if (reviewEditMode) {
@@ -3318,7 +3340,7 @@ function createReviewSegmentElement(segment) {
         speakerLabel.style.justifyContent = 'center';
         speakerLabel.style.lineHeight = '1';
         speakerLabel.style.flexShrink = '0'; // Don't squash the badge
-        speakerLabel.style.alignSelf = 'center'; // Force vertical centering
+        speakerLabel.style.marginTop = '0.15rem'; // Visually center with the first line of text
 
         if (reviewEditMode) {
             // Add cross indicator for removal
@@ -3350,7 +3372,7 @@ function createReviewSegmentElement(segment) {
     textSpan.style.wordBreak = 'break-word'; // Ensure long words break
     textSpan.style.overflowWrap = 'break-word';
     textSpan.style.flex = '1'; // Take up remaining space
-    textSpan.style.lineHeight = '1.35';
+    textSpan.style.lineHeight = '1.7';
 
     // Visual feedback for editable text
     if (reviewEditMode) {
@@ -3647,7 +3669,7 @@ function createReviewSegmentElement(segment) {
     div.appendChild(textSpan);
 
     textSpan.querySelectorAll('.word-highlight').forEach(mark => {
-        mark.title = "Right-click to remove note";
+        mark.title = "";
         mark.style.cursor = "help";
 
         // Allow removal on click when in edit/notes mode
@@ -3678,6 +3700,8 @@ function createReviewNoteElement(note, index) {
     if (note.isNew) div.classList.add('just-placed');
     div.draggable = true;
     div.setAttribute('data-note-id', index);
+    div.style.margin = '0.75rem 0 0.75rem 1rem';
+    div.style.lineHeight = '1.6';
     div.title = "Drag to reposition in transcript";
 
     const meta = document.createElement('div');
