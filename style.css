@@ -1809,3 +1809,19 @@ input:checked+.slider:before {
     border-color: var(--brand-primary);
     box-shadow: 0 0 0 2px rgba(234, 88, 12, 0.1);
 }
+
+/* Global Back Button Override for Visibility */
+.back-btn {
+    width: 44px;
+    height: 44px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+}
+
+.back-btn svg {
+    width: 32px;
+    height: 32px;
+    stroke-width: 3px;
+}

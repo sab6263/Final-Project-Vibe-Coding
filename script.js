@@ -2926,12 +2926,20 @@ async function downloadTranscriptAsPDF() {
         };
 
         // Add a header for the PDF
+        const dateStr = new Date().toLocaleDateString('de-DE', {
+            year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit'
+        });
+
         const headerHtml = `
-                < div style = "font-family: Inter, sans-serif; padding-bottom: 20px; border-bottom: 2px solid #eee; margin-bottom: 30px;" >
-                <h1 style="color: #1a202c; margin: 0; font-size: 24px;">${sessionTitle}</h1>
-                <p style="color: #718096; margin: 5px 0 0 0; font-size: 14px;">Transcript Exported from Contexture</p>
-            </div >
-                `;
+            <div style="font-family: Inter, sans-serif; padding-bottom: 20px; border-bottom: 2px solid #eee; margin-bottom: 30px;">
+                <h1 style="color: #1a202c; margin: 0; font-size: 24px; margin-bottom: 10px;">${sessionTitle}</h1>
+                <div style="color: #4a5568; font-size: 14px; line-height: 1.6;">
+                    <strong>Date:</strong> ${dateStr}<br>
+                    <strong>Participant:</strong> ${sessionTitle}
+                </div>
+                <p style="color: #94a3b8; margin: 10px 0 0 0; font-size: 12px;">Transcript Exported from Contexture</p>
+            </div>
+        `;
 
         // Create a clone for the PDF to add the header without affecting the real UI
         const container = document.createElement('div');
@@ -2958,13 +2966,34 @@ async function downloadTranscriptAsPDF() {
             if (noteText) {
                 // Create a visible span for the note
                 const noteSpan = document.createElement('span');
-                noteSpan.innerHTML = ` < span style = "color: #64748b; font-size: 0.8em; font-weight: 700;" > [Note: ${noteText}]</span > `;
+                noteSpan.innerHTML = `<span style="background-color: #f1f5f9; color: #475569; padding: 2px 6px; border-radius: 4px; font-size: 0.75em; border: 1px solid #e2e8f0; display: inline-block; margin-left: 6px; vertical-align: middle; font-weight: 600;">📝 ${noteText}</span>`;
 
-                // insertAfter the highlight
-                if (highlight.nextSibling) {
-                    highlight.parentNode.insertBefore(noteSpan, highlight.nextSibling);
+                // Intelligent placement: Attempt to place note after the current word if inside one to avoid splitting words
+                let targetNode = highlight;
+                const nextNode = highlight.nextSibling;
+
+                if (nextNode && nextNode.nodeType === 3) { // Text node
+                    const text = nextNode.textContent;
+                    // Check if it starts with a non-whitespace char (meaning word continues)
+                    if (text && text.length > 0 && !/^\s/.test(text)) {
+                        // Find end of this word
+                        const match = text.match(/^(\S+)/);
+                        if (match) {
+                            const wordEndIndex = match[0].length;
+                            // Split text node to creating a dedicated node for the suffix of the word
+                            nextNode.splitText(wordEndIndex);
+                            // Now nextNode contains just the word suffix.
+                            // We want to insert AFTER this suffix.
+                            targetNode = nextNode;
+                        }
+                    }
+                }
+
+                // insertAfter the targetNode
+                if (targetNode.nextSibling) {
+                    targetNode.parentNode.insertBefore(noteSpan, targetNode.nextSibling);
                 } else {
-                    highlight.parentNode.appendChild(noteSpan);
+                    targetNode.parentNode.appendChild(noteSpan);
                 }
             }
         });
