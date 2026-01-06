@@ -3618,42 +3618,68 @@ function createReviewSegmentElement(segment) {
                     // Update current segment
                     textSpan._isSplitting = true; // Prevent blur from overwriting
 
-                    const fullText = textSpan.innerText;
-                    const textBeforeCursor = fullText.substring(0, globalOffset);
-                    const textAfterCursor = fullText.substring(globalOffset);
+                    // 1. DOM Split (Safe HTML Handling)
+                    // We allow the browser to handle the complex HTML splitting (closing/opening tags)
+                    const rangeAfter = document.createRange();
+                    rangeAfter.selectNodeContents(textSpan);
+                    rangeAfter.setStart(range.startContainer, range.startOffset);
+                    const fragment = rangeAfter.extractContents(); // This modifies textSpan in-place!
 
-                    // Re-distribute highlights
+                    // Now textSpan contains the first half, fragment contains the second half
+                    const htmlBefore = textSpan.innerHTML;
+                    const textBefore = textSpan.innerText;
+
+                    const tempDiv = document.createElement('div');
+                    tempDiv.appendChild(fragment);
+                    const htmlAfter = tempDiv.innerHTML;
+                    const textAfter = tempDiv.innerText;
+
+                    // 2. Highlight Data Model Split
+                    // We still need to split the data model to ensure persistence is correct
                     const highlightsBefore = [];
                     const highlightsAfter = [];
 
                     if (segment.highlights) {
                         segment.highlights.forEach(h => {
                             if (h.end <= globalOffset) {
-                                // Entirely before the split
+                                // Entirely before
                                 highlightsBefore.push(h);
                             } else if (h.start >= globalOffset) {
-                                // Entirely after the split - adjust offset
+                                // Entirely after - adjust relative offset
                                 highlightsAfter.push({
                                     ...h,
                                     start: h.start - globalOffset,
+                                    end: h.end - globalOffset
+                                });
+                            } else {
+                                // Spanning Split
+                                // Part 1 (Before)
+                                highlightsBefore.push({
+                                    ...h,
+                                    end: globalOffset
+                                });
+                                // Part 2 (After)
+                                highlightsAfter.push({
+                                    ...h,
+                                    start: 0,
                                     end: h.end - globalOffset
                                 });
                             }
                         });
                     }
 
-                    segment.text = textBeforeCursor.trim();
-                    segment.html = textSpan.innerHTML.substring(0, range.startOffset); // Simplified HTML split, might need more robust parsing
+                    segment.text = textBefore.trim();
+                    segment.html = htmlBefore;
                     segment.highlights = highlightsBefore;
 
                     // Create new segment
                     const newSegment = {
                         id: 'seg_' + Date.now(),
-                        text: textAfterCursor.trim(),
-                        html: textSpan.innerHTML.substring(range.endOffset), // Simplified HTML split
+                        text: textAfter.trim(),
+                        html: htmlAfter,
                         timestamp: segment.timestamp + 1,
                         notes: [],
-                        speaker: null, // Continuation usually implies same speaker or flow, but null is safer default
+                        speaker: null,
                         highlights: highlightsAfter
                     };
 
