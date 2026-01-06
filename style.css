@@ -419,16 +419,16 @@ body.fullscreen-active #interviewDetailView {
     border-color: #1e3a8a;
 }
 
-/* Speaker switch button - always solid filled */
+/* Speaker switch button - Default (Interviewer) - Orange */
 #switchSpeakerBtn {
-    background: #1e40af;
-    color: white;
-    border-color: #1e40af;
+    background: #f1f5f9;
+    color: #64748b;
+    border-color: #e2e8f0;
 }
 
 #switchSpeakerBtn:hover:not(:disabled) {
-    background: #1e3a8a;
-    border-color: #1e3a8a;
+    background: #e2e8f0;
+    border-color: #cbd5e1;
 }
 
 /* Projects Grid - Glassy Cards */
@@ -1322,8 +1322,9 @@ body.fullscreen-active #interviewDetailView {
     }
 
     .back-btn svg {
-        width: 20px;
-        height: 20px;
+        width: 28px;
+        height: 28px;
+        stroke-width: 3px;
     }
 
     .header-left {
@@ -1510,8 +1511,8 @@ body.fullscreen-active #interviewDetailView {
 .speaker-label {
     display: block;
     font-weight: 700;
-    color: var(--brand-primary);
-    /* Interviewer Orange */
+    color: #64748b;
+    /* Interviewer Grey */
     font-size: 0.70rem;
     text-transform: uppercase;
     letter-spacing: 0.05em;
@@ -1519,7 +1520,8 @@ body.fullscreen-active #interviewDetailView {
     margin-bottom: 0.2rem;
 }
 
-.speaker-label.respondent {
+.speaker-label.respondent,
+.speaker-label.participant {
     color: #1e40af;
     /* Deep Blue for the respondent */
 }

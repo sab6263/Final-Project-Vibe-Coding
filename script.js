@@ -2005,6 +2005,35 @@ function startTranscription() {
     }
 }
 
+function toggleSpeaker() {
+    const nextSpeaker = currentSpeaker === 'interviewer' ? 'participant' : 'interviewer';
+
+    // Update UI
+    const btn = document.getElementById('switchSpeakerBtn');
+    if (btn) {
+        const span = btn.querySelector('span');
+        if (span) span.textContent = nextSpeaker === 'interviewer' ? 'Interviewer' : 'Participant';
+
+        // Update styling
+        if (nextSpeaker === 'participant') {
+            btn.classList.add('participant');
+        } else {
+            btn.classList.remove('participant');
+        }
+    }
+
+    // Hande Logic
+    if (isRecording && recognition) {
+        // Set pending switch so onend can pick it up
+        window.pendingSpeakerSwitch = nextSpeaker;
+        // Stop recognition to force a break and apply the new speaker on restart
+        recognition.stop();
+    } else {
+        // If not recording or paused, just update state immediately
+        currentSpeaker = nextSpeaker;
+    }
+}
+
 function stopTranscription() {
     if (recognition) {
         recognition.stop();
@@ -2346,6 +2375,8 @@ function saveInlineNote() {
 
         const el = document.getElementById(selectedSegmentId);
         if (el) updateSegmentContent(el, segment);
+
+        pushToReviewHistory();
     }
 
     inlineNoteInput.value = '';
@@ -2371,6 +2402,18 @@ async function finalizeInterview() {
 // ============================================================================
 // GLOBAL TOOLTIP LOGIC
 // ============================================================================
+
+// Helper for tooltip content
+function escapeHtml(text) {
+    if (!text) return '';
+    return text
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+}
+
 function initGlobalTooltip() {
     // Create tooltip element
     const tooltip = document.createElement('div');
@@ -2394,9 +2437,9 @@ function initGlobalTooltip() {
                 const highlightStart = target.dataset.highlightStart;
 
                 tooltip.innerHTML = `
-                < span > ${escapeHtml(note)}</span >
+                    <span style="flex: 1;">${escapeHtml(note)}</span>
                     <button class="tooltip-delete-btn" title="Remove Note">✕</button>
-            `;
+                `;
 
                 const deleteBtn = tooltip.querySelector('.tooltip-delete-btn');
                 if (deleteBtn) {
@@ -2435,8 +2478,8 @@ function initGlobalTooltip() {
                     tooltip.classList.remove('bottom-oriented');
                 }
 
-                tooltip.style.top = `${top} px`;
-                tooltip.style.left = `${left} px`;
+                tooltip.style.top = `${top}px`;
+                tooltip.style.left = `${left}px`;
             }
         } else if (e.target.closest('.global-tooltip')) {
             isHoveringTooltip = true;
@@ -3094,15 +3137,15 @@ function initDragAndDrop() {
             dragImg.style.position = 'absolute';
             dragImg.style.top = '-1000px';
             dragImg.style.left = '-1000px';
-            dragImg.style.opacity = '0.9';
+            dragImg.style.opacity = '0.75';
             dragImg.style.boxShadow = '0 10px 15px -3px rgba(0, 0, 0, 0.1)';
             dragImg.style.pointerEvents = 'none';
             dragImg.innerHTML = `
-                < div class="review-note-meta" style = "margin-bottom: 0.5rem; opacity: 0.7;" >
+                <div class="review-note-meta" style="margin-bottom: 0.5rem; opacity: 0.7;">
                     <span style="font-size: 0.75rem; font-weight: 600; text-transform: uppercase;">Session Note (Placing...)</span>
-                </div >
+                </div>
                 <div style="font-size: 0.95rem; line-height: 1.5; color: var(--text-primary);">
-                    ${content}
+                    ${escapeHtml(content)}
                 </div>
             `;
             document.body.appendChild(dragImg);
@@ -3819,3 +3862,13 @@ if (uniConfirmBtn) {
 
 if (uniCancelBtn) uniCancelBtn.addEventListener('click', closeUniModal);
 if (closeUniModalIcon) closeUniModalIcon.addEventListener('click', closeUniModal);
+
+function escapeHtml(text) {
+    if (!text) return '';
+    return text
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+}
