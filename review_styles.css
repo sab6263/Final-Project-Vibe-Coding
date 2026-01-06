@@ -177,7 +177,7 @@
 
 /* Visual feedback for dropped notes */
 .review-note-card.just-placed {
-    background: #ffedd5 !important;
+    background: #ffedd5;
     /* Orange 100 - slightly darker */
     animation: fade-out-placed 3s forwards;
 }

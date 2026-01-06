@@ -3375,7 +3375,8 @@ function initDragAndDrop() {
 
                         setTimeout(() => {
                             delete newNote.isNew;
-                        }, 2000);
+                            renderReview();
+                        }, 3000);
                     }
                 } else if (type === 'move-note') {
                     const noteId = parseInt(e.dataTransfer.getData('noteId'));
