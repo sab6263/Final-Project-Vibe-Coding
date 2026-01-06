@@ -220,7 +220,7 @@
 /* Global JS Tooltip Styles */
 .global-tooltip {
     position: fixed;
-    background: rgba(15, 23, 42, 0.9);
+    background: rgba(30, 41, 59, 0.92);
     backdrop-filter: blur(4px);
     color: white;
     padding: 0.5rem 0.8rem;

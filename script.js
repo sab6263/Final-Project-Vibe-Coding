@@ -2575,10 +2575,36 @@ function ensureEditorFocus() {
 }
 
 // Bind handlers to mousedown to prevent focus loss
+// Helper to sync formatting changes to history
+function updateActiveSegmentFromDOM() {
+    const selection = window.getSelection();
+    if (!selection.rangeCount) return;
+    const focusNode = selection.focusNode;
+    if (!focusNode) return;
+
+    // Find transcript-segment or review-segment
+    const segmentEl = focusNode.nodeType === 3 ? focusNode.parentNode.closest('.review-segment') : focusNode.closest('.review-segment');
+
+    if (segmentEl) {
+        const id = segmentEl.getAttribute('data-segment-id');
+        const segment = transcriptSegments.find(s => s.id === id);
+        if (segment) {
+            const textSpan = segmentEl.querySelector('[contenteditable]');
+            if (textSpan) {
+                segment.html = textSpan.innerHTML;
+                segment.text = textSpan.innerText;
+                pushToReviewHistory();
+            }
+        }
+    }
+}
+
+// Bind handlers to mousedown to prevent focus loss and sync history
 if (formatBoldBtn) {
     formatBoldBtn.addEventListener('mousedown', (e) => {
         e.preventDefault();
         document.execCommand('bold', false, null);
+        updateActiveSegmentFromDOM();
     });
 }
 
@@ -2586,6 +2612,7 @@ if (formatItalicBtn) {
     formatItalicBtn.addEventListener('mousedown', (e) => {
         e.preventDefault();
         document.execCommand('italic', false, null);
+        updateActiveSegmentFromDOM();
     });
 }
 
@@ -2593,6 +2620,7 @@ if (increaseFontSizeBtn) {
     increaseFontSizeBtn.addEventListener('mousedown', (e) => {
         e.preventDefault();
         applyRelativeFontSize('1.25em');
+        updateActiveSegmentFromDOM();
     });
 }
 
@@ -2600,6 +2628,7 @@ if (decreaseFontSizeBtn) {
     decreaseFontSizeBtn.addEventListener('mousedown', (e) => {
         e.preventDefault();
         applyRelativeFontSize('0.8em');
+        updateActiveSegmentFromDOM();
     });
 }
 
