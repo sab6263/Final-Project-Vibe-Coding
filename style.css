@@ -1088,6 +1088,7 @@ body.fullscreen-active #interviewDetailView {
 
 .guideline-q-item.is-completed .q-checkbox {
     background: #ea580c;
+    border-color: #ea580c;
 }
 
 .q-checkbox::after {
@@ -1207,16 +1208,30 @@ body.fullscreen-active #interviewDetailView {
 }
 
 .btn-start {
-    background: #10b981;
-    /* Emerald 500 */
+    background: #1e40af;
+    /* Participant Blue */
     color: white;
-    box-shadow: 0 4px 6px -1px rgba(16, 185, 129, 0.2);
+    box-shadow: 0 4px 6px -1px rgba(30, 64, 175, 0.3);
 }
 
 .btn-pause {
-    background: #64748b;
-    /* Slate 500 */
+    background: #1e40af;
+    /* Participant Blue */
     color: white;
+}
+
+#submitGeneralNoteBtn {
+    background: #ea580c;
+    /* Orange */
+    box-shadow: 0 4px 6px -1px rgba(234, 88, 12, 0.3);
+    padding: 0.5rem 1rem !important;
+    /* Smaller padding */
+    font-size: 0.85rem !important;
+    height: auto !important;
+}
+
+#submitGeneralNoteBtn:hover {
+    box-shadow: 0 8px 15px -3px rgba(234, 88, 12, 0.4);
 }
 
 .btn-stop {
