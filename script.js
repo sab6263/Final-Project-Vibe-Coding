@@ -2364,17 +2364,35 @@ function saveInlineNote() {
     if (!noteText || !selectedSegmentId || !currentSelection) return;
 
     const segment = transcriptSegments.find(s => s.id === selectedSegmentId);
-    if (segment) {
-        if (!segment.highlights) segment.highlights = [];
-        segment.highlights.push({
-            note: noteText,
-            text: currentSelection.text,
-            start: currentSelection.start,
-            end: currentSelection.end
-        });
+    if (!segment) return;
 
-        const el = document.getElementById(selectedSegmentId);
-        if (el) updateSegmentContent(el, segment);
+    if (!segment.highlights) segment.highlights = [];
+    segment.highlights.push({
+        note: noteText,
+        text: currentSelection.text,
+        start: currentSelection.start,
+        end: currentSelection.end
+    });
+
+    const el = document.getElementById(selectedSegmentId);
+    if (el) {
+        if (el.classList.contains('review-segment')) {
+            // Review Mode: Correctly update the existing DOM without destroying structure
+            if (currentTempMark) {
+                currentTempMark.setAttribute('data-segment-id', selectedSegmentId);
+                currentTempMark.setAttribute('data-highlight-start', currentSelection.start);
+                currentTempMark.setAttribute('data-note', escapeHtml(noteText)); // Ensure note is set on DOM
+                currentTempMark.style.opacity = ''; // Make permanent
+                currentTempMark = null; // Clear reference
+            }
+
+            // Sync the updated DOM to segment.html so undo/redo works
+            // We can reuse the helper we appended earlier
+            updateActiveSegmentFromDOM();
+        } else {
+            // Live Mode: Safe to rebuild content
+            updateSegmentContent(el, segment);
+        }
 
         pushToReviewHistory();
     }
