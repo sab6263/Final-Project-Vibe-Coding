@@ -201,7 +201,7 @@
     color: inherit;
     border-radius: 2px;
     padding: 0 1px;
-    cursor: help;
+    cursor: pointer;
     transition: background 0.2s;
     border-bottom: 2px solid var(--brand-primary);
     position: relative;

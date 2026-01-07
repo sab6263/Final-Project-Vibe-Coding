@@ -1906,11 +1906,25 @@ function stopTimer() {
 }
 
 // Transcription Logic (WebSpeech API)
-function startTranscription() {
+async function startTranscription() {
     window.SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!window.SpeechRecognition) {
         alert('Web Speech API is not supported in this browser. Please use Chrome.');
         return;
+    }
+
+    // --- PERMISSION FIX ---
+    // If we haven't acquired a persistent stream yet, wait for it.
+    // This guarantees the browser considers the page to have "Mic Access"
+    // BEFORE we start the finicky SpeechRecognition engine.
+    if (!window.persistentAudioStream) {
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            window.persistentAudioStream = stream;
+        } catch (err) {
+            console.warn("Could not acquire persistent mic stream:", err);
+            // If the user denied this, SpeechRecognition will likely fail too, but we let it try.
+        }
     }
 
     const selectedLang = currentTranscriptionLanguage;
@@ -2024,10 +2038,10 @@ function toggleSpeaker() {
 
     // Hande Logic
     if (isRecording && recognition) {
-        // Set pending switch so onend can pick it up
-        window.pendingSpeakerSwitch = nextSpeaker;
-        // Stop recognition to force a break and apply the new speaker on restart
-        recognition.stop();
+        // update immediately - no need to stop/restart just for a label change
+        // The next result (final or interim) will pick up the new speaker variable
+        currentSpeaker = nextSpeaker;
+        showToast(`Speaker switched to ${nextSpeaker === 'interviewer' ? 'Interviewer' : 'Participant'}`);
     } else {
         // If not recording or paused, just update state immediately
         currentSpeaker = nextSpeaker;
@@ -2509,7 +2523,7 @@ function hideGlobalTooltip() {
             globalTooltip.classList.remove('visible');
             setTimeout(() => globalTooltip.classList.add('hidden'), 200);
         }
-    }, 300);
+    }, 3000);
 }
 
 function initGlobalTooltip() {
@@ -2545,6 +2559,15 @@ function initGlobalTooltip() {
         const target = el.closest('.word-highlight');
         if (target) hideGlobalTooltip();
     });
+
+    // Hide on scroll (capture phase to catch all scrolling)
+    document.addEventListener('scroll', () => {
+        if (globalTooltip && globalTooltip.classList.contains('visible')) {
+            clearTimeout(globalTooltipTimeout);
+            globalTooltip.classList.remove('visible');
+            globalTooltip.classList.add('hidden');
+        }
+    }, { capture: true, passive: true });
 }
 
 /**
@@ -3883,7 +3906,7 @@ function createReviewSegmentElement(segment) {
 
     textSpan.querySelectorAll('.word-highlight').forEach(mark => {
         mark.title = "";
-        mark.style.cursor = "help";
+        mark.style.cursor = "pointer";
 
         // Allow removal on click when in edit/notes mode
         mark.addEventListener('click', (e) => {

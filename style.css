@@ -407,18 +407,6 @@ body.fullscreen-active #interviewDetailView {
     gap: 0.4rem;
 }
 
-/* Speaker switch button - Participant state */
-#switchSpeakerBtn.participant {
-    background: #1e40af;
-    color: white;
-    border-color: #1e40af;
-}
-
-#switchSpeakerBtn.participant:hover {
-    background: #1e3a8a;
-    border-color: #1e3a8a;
-}
-
 /* Speaker switch button - Default (Interviewer) - Orange */
 #switchSpeakerBtn {
     background: #f1f5f9;
@@ -429,6 +417,18 @@ body.fullscreen-active #interviewDetailView {
 #switchSpeakerBtn:hover:not(:disabled) {
     background: #e2e8f0;
     border-color: #cbd5e1;
+}
+
+/* Speaker switch button - Participant state */
+#switchSpeakerBtn.participant {
+    background: #1e40af;
+    color: white;
+    border-color: #1e40af;
+}
+
+#switchSpeakerBtn.participant:hover {
+    background: #1e3a8a;
+    border-color: #1e3a8a;
 }
 
 /* Projects Grid - Glassy Cards */
@@ -1824,4 +1824,27 @@ input:checked+.slider:before {
     width: 32px;
     height: 32px;
     stroke-width: 3px;
+}
+
+/* Speaker Labels in Transcript */
+.speaker-label {
+    display: inline-block;
+    padding: 0.2rem 0.6rem;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-right: 0.5rem;
+    margin-bottom: 0.25rem;
+}
+
+.speaker-label.interviewer {
+    background: #f1f5f9;
+    color: #64748b;
+}
+
+.speaker-label.participant {
+    background: #1e40af;
+    color: white;
 }
