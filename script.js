@@ -3382,15 +3382,38 @@ function initDragAndDrop() {
             }
         } else if ((type === 'new-note' || type === 'move-note') && targetSegment) {
             const segId = targetSegment.getAttribute('data-segment-id') || targetSegment.getAttribute('data-seg-id');
-            const segment = transcriptSegments.find(s => s.id === segId);
+            const segmentIndex = transcriptSegments.findIndex(s => s.id === segId);
+            const segment = transcriptSegments[segmentIndex];
 
             if (segment) {
+                // Determine if drop was at top or bottom of segment
+                const rect = targetSegment.getBoundingClientRect();
+                const relY = e.clientY - rect.top;
+                const isDropAtTop = relY < rect.height / 2;
+
+                // Calculate the appropriate timestamp for insertion
+                let insertTimestamp;
+                if (isDropAtTop) {
+                    // Drop at top: insert BEFORE this segment
+                    // Use a timestamp slightly before this segment (between prev and current)
+                    if (segmentIndex > 0) {
+                        const prevSegment = transcriptSegments[segmentIndex - 1];
+                        // Place note between previous segment and current segment
+                        insertTimestamp = prevSegment.timestamp + (segment.timestamp - prevSegment.timestamp) / 2;
+                    } else {
+                        // First segment - use timestamp slightly before
+                        insertTimestamp = segment.timestamp - 0.5;
+                    }
+                } else {
+                    // Drop at bottom: insert AFTER this segment (original behavior)
+                    insertTimestamp = segment.timestamp;
+                }
+
                 if (type === 'new-note') {
                     const content = e.dataTransfer.getData('content');
                     if (segment && content) {
                         pushToReviewHistory();
-                        // Place it exactly at this segment's timestamp
-                        const newNote = { content, timestamp: segment.timestamp, isNew: true, isReviewNote: true };
+                        const newNote = { content, timestamp: insertTimestamp, isNew: true, isReviewNote: true };
                         generalNotes.push(newNote);
                         if (revNoteInput) revNoteInput.value = ''; // Clear input
                         renderReview(); // Re-render
@@ -3406,7 +3429,7 @@ function initDragAndDrop() {
                     if (!isNaN(noteId) && generalNotes[noteId]) {
                         pushToReviewHistory();
                         // Update timestamp to match new location
-                        generalNotes[noteId].timestamp = segment.timestamp;
+                        generalNotes[noteId].timestamp = insertTimestamp;
                         // Force resort
                         renderReview();
                         showToast('Note repositioned');

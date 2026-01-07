@@ -68,7 +68,7 @@
     transition: background 0.2s;
 }
 
-/* Drop Target Indicators - Non-shifting */
+/* Drop Target Indicators - Non-shifting, centered between segments */
 .review-segment.drop-target-top::before {
     content: '';
     position: absolute;
@@ -79,6 +79,8 @@
     background: repeating-linear-gradient(90deg, var(--brand-primary), var(--brand-primary) 6px, transparent 6px, transparent 10px);
     pointer-events: none;
     z-index: 10;
+    transform: translateY(-0.25rem);
+    /* Half of the gap (0.5rem / 2) to center between segments */
 }
 
 .review-segment.drop-target-bottom::after {
@@ -91,6 +93,8 @@
     background: repeating-linear-gradient(90deg, var(--brand-primary), var(--brand-primary) 6px, transparent 6px, transparent 10px);
     pointer-events: none;
     z-index: 10;
+    transform: translateY(0.25rem);
+    /* Half of the gap (0.5rem / 2) to center between segments */
 }
 
 .review-segment .speaker-label {
