@@ -125,9 +125,9 @@
 }
 
 .review-note-card {
-    background: #fff7ed;
-    /* Light orange background */
-    border-left: 3px solid var(--brand-primary);
+    background: #e2e8f0;
+    /* Light grey background */
+    border-left: 3px solid #64748b;
     padding: 0.5rem 1rem;
     border-radius: 0 8px 8px 0;
     margin: 0.75rem 0 0.75rem 1rem;
@@ -181,22 +181,22 @@
 
 /* Visual feedback for dropped notes */
 .review-note-card.just-placed {
-    background: #ffedd5;
-    /* Orange 100 - slightly darker */
+    background: #cbd5e1;
+    /* Darker grey for emphasis */
     animation: fade-out-placed 3s forwards;
 }
 
 @keyframes fade-out-placed {
     0% {
-        background: #ffedd5;
+        background: #cbd5e1;
     }
 
     70% {
-        background: #ffedd5;
+        background: #cbd5e1;
     }
 
     100% {
-        background: #fff7ed;
+        background: #e2e8f0;
     }
 }
 

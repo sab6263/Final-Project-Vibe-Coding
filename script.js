@@ -1421,13 +1421,8 @@ async function renderInterviewsList(projectId) {
             // Same styling for all interviews - more visible boxes
             const cardStyle = 'padding: 1rem; background: white; border-radius: var(--radius-md); border: 1px solid #e2e8f0; margin-bottom: 0.5rem; display: flex; justify-content: space-between; align-items: center; transition: all 0.2s; user-select: none; box-shadow: 0 1px 3px rgba(0,0,0,0.05);';
 
-            // Icon for imported transcripts - grey color
-            const importIcon = isImported
-                ? `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2" style="margin-right: 0.5rem; flex-shrink: 0;">
-                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
-                    <polyline points="14 2 14 8 20 8"></polyline>
-                   </svg>`
-                : '';
+            // Icon for imported transcripts - removed as requested
+            const importIcon = '';
 
             return `
             <div class="card-item-row interview-draggable ${isImported ? 'imported-transcript' : ''}" 
