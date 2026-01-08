@@ -1848,3 +1848,29 @@ input:checked+.slider:before {
     background: #1e40af;
     color: white;
 }
+
+/* SortableJS Drag and Drop Styles */
+.sortable-ghost {
+    opacity: 0.4;
+    background: var(--brand-surface);
+}
+
+.sortable-chosen {
+    background: white;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.sortable-drag {
+    opacity: 1;
+    background: white;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
+    border: 2px solid var(--brand-primary);
+}
+
+.interview-drag-handle {
+    cursor: grab;
+}
+
+.interview-drag-handle:active {
+    cursor: grabbing;
+}

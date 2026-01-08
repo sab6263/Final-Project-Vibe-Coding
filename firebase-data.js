@@ -513,18 +513,38 @@ async function saveInterviewToFirestore(interviewData) {
         const payload = {
             userId: currentUser.uid,
             title: interviewData.title,
-            guidelineId: interviewData.guidelineId,
-            projectId: interviewData.projectId, // Save Project ID
+            guidelineId: interviewData.guidelineId || null,
+            projectId: interviewData.projectId,
             participant: interviewData.participant || '',
             round: interviewData.round || '',
             createdAt: firebase.firestore.FieldValue.serverTimestamp(),
-            status: 'planned' // Default status
+            status: interviewData.status || 'planned',
+            isImported: interviewData.isImported || false,
+            transcriptSegments: interviewData.transcriptSegments || [],
+            generalNotes: interviewData.generalNotes || []
         };
         const docRef = await db.collection('interviews').add(payload);
 
         return docRef.id;
     } catch (error) {
         console.error('Error saving interview:', error);
+        throw error;
+    }
+}
+
+/**
+ * Update an existing interview in Firestore
+ */
+async function updateInterviewInFirestore(interviewId, updates) {
+    if (!currentUser) return;
+
+    try {
+        await db.collection('interviews').doc(interviewId).update({
+            ...updates,
+            updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+        });
+    } catch (error) {
+        console.error('Error updating interview:', error);
         throw error;
     }
 }
@@ -634,6 +654,7 @@ window.loadAllUserGuidelines = loadAllUserGuidelines;
 window.updateGuidelineInFirestore = updateGuidelineInFirestore;
 window.saveInterviewToFirestore = saveInterviewToFirestore;
 window.loadInterviewFromFirestore = loadInterviewFromFirestore;
+window.updateInterviewInFirestore = updateInterviewInFirestore;
 window.deleteInterviewFromFirestore = async function (interviewId) {
     if (!currentUser) return;
     try {

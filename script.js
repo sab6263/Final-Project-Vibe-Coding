@@ -283,6 +283,12 @@ const interviewDetailView = document.getElementById('interviewDetailView');
 const interviewDetailTitle = document.getElementById('interviewDetailTitle');
 const backToDashboardBtn = document.getElementById('backToDashboardBtn');
 
+// DOM Elements - Interview Mode Selection Modal
+const interviewModeModal = document.getElementById('interviewModeModal');
+const closeInterviewModeModal = document.getElementById('closeInterviewModeModal');
+const startNewInterviewBtn = document.getElementById('startNewInterviewBtn');
+const importTranscriptBtn = document.getElementById('importTranscriptBtn');
+
 // DOM Elements - Create Interview Modal
 const createInterviewModal = document.getElementById('createInterviewModal');
 const closeInterviewModalIcon = document.getElementById('closeInterviewModalIcon');
@@ -293,11 +299,72 @@ const interviewGuidelineSelect = document.getElementById('interviewGuideline');
 const interviewParticipantInput = document.getElementById('interviewParticipant');
 const interviewRoundInput = document.getElementById('interviewRound');
 
-// Interview Listeners
-if (createInterviewBtn) createInterviewBtn.addEventListener('click', openCreateInterviewModal);
+// DOM Elements - Import Transcript Modal
+const importTranscriptModal = document.getElementById('importTranscriptModal');
+const closeImportTranscriptModal = document.getElementById('closeImportTranscriptModal');
+const cancelImportTranscriptBtn = document.getElementById('cancelImportTranscriptBtn');
+const confirmImportTranscriptBtn = document.getElementById('confirmImportTranscriptBtn');
+const importTranscriptTitleInput = document.getElementById('importTranscriptTitle');
+const importTranscriptParticipantInput = document.getElementById('importTranscriptParticipant');
+const transcriptUploadArea = document.getElementById('transcriptUploadArea');
+const transcriptPdfInput = document.getElementById('transcriptPdfInput');
+const transcriptFileInfo = document.getElementById('transcriptFileInfo');
+const transcriptFileName = document.getElementById('transcriptFileName');
+const removeTranscriptFile = document.getElementById('removeTranscriptFile');
+
+// State for imported transcript
+let importedTranscriptText = '';
+let importedTranscriptFile = null;
+
+// Interview Mode Selection Modal Listeners
+if (createInterviewBtn) createInterviewBtn.addEventListener('click', openInterviewModeModal);
+if (closeInterviewModeModal) closeInterviewModeModal.addEventListener('click', () => interviewModeModal.classList.add('hidden'));
+if (startNewInterviewBtn) startNewInterviewBtn.addEventListener('click', () => {
+    interviewModeModal.classList.add('hidden');
+    openCreateInterviewModal();
+});
+if (importTranscriptBtn) importTranscriptBtn.addEventListener('click', () => {
+    interviewModeModal.classList.add('hidden');
+    openImportTranscriptModal();
+});
+
+// Interview Modal Listeners
 if (closeInterviewModalIcon) closeInterviewModalIcon.addEventListener('click', closeCreateInterviewModal);
 if (cancelInterviewBtn) cancelInterviewBtn.addEventListener('click', closeCreateInterviewModal);
 if (confirmStartInterviewBtn) confirmStartInterviewBtn.addEventListener('click', submitCreateInterview);
+
+// Import Transcript Modal Listeners
+if (closeImportTranscriptModal) closeImportTranscriptModal.addEventListener('click', closeImportTranscriptModalFn);
+if (cancelImportTranscriptBtn) cancelImportTranscriptBtn.addEventListener('click', closeImportTranscriptModalFn);
+if (confirmImportTranscriptBtn) confirmImportTranscriptBtn.addEventListener('click', submitImportTranscript);
+if (transcriptUploadArea) transcriptUploadArea.addEventListener('click', () => transcriptPdfInput.click());
+if (transcriptPdfInput) transcriptPdfInput.addEventListener('change', handleTranscriptFileSelect);
+if (removeTranscriptFile) removeTranscriptFile.addEventListener('click', clearTranscriptFile);
+
+// Drag and drop for transcript upload
+if (transcriptUploadArea) {
+    transcriptUploadArea.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        transcriptUploadArea.style.borderColor = 'var(--brand-primary)';
+        transcriptUploadArea.style.background = '#fff7ed';
+    });
+    transcriptUploadArea.addEventListener('dragleave', () => {
+        transcriptUploadArea.style.borderColor = '#e2e8f0';
+        transcriptUploadArea.style.background = '#f8fafc';
+    });
+    transcriptUploadArea.addEventListener('drop', (e) => {
+        e.preventDefault();
+        transcriptUploadArea.style.borderColor = '#e2e8f0';
+        transcriptUploadArea.style.background = '#f8fafc';
+        const file = e.dataTransfer.files[0];
+        if (file && file.type === 'application/pdf') {
+            processTranscriptFile(file);
+        } else {
+            showToast('Please upload a PDF file', 'error');
+        }
+    });
+}
+
 // backToDashboardBtn listener moved to closeInterview/initInterviewListeners logic
 
 
@@ -1291,7 +1358,7 @@ function renderGuidelinesList(project) {
 
     list.className = 'list-container';
     list.innerHTML = project.guidelines.map(g => `
-        <div class="card-item-row" onclick="editGuideline('${project.id}', '${g.id}')" style="cursor: pointer; padding: 1rem; background: rgba(255,255,255,0.6); border-radius: var(--radius-md); border: 1px solid rgba(0,0,0,0.05); margin-bottom: 0.5rem; display: flex; justify-content: space-between; align-items: center; transition: all 0.2s;">
+        <div class="card-item-row" onclick="editGuideline('${project.id}', '${g.id}')" style="cursor: pointer; padding: 1rem; background: white; border-radius: var(--radius-md); border: 1px solid #e2e8f0; margin-bottom: 0.5rem; display: flex; justify-content: space-between; align-items: center; transition: all 0.2s; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
             <div style="font-weight: 600; color: var(--text-title);">${escapeHtml(g.title)}</div>
             <div style="display: flex; align-items: center; gap: 0.75rem;">
                 <span style="font-size: 0.85rem; color: var(--text-muted); background: rgba(0,0,0,0.05); padding: 0.25rem 0.5rem; border-radius: 20px;">
@@ -1315,7 +1382,7 @@ async function renderInterviewsList(projectId) {
     list.innerHTML = '<p style="text-align: center; color: var(--text-muted); padding: 1rem;">Loading interviews...</p>';
 
     try {
-        const interviews = await window.loadInterviewsForProject(projectId);
+        let interviews = await window.loadInterviewsForProject(projectId);
 
         if (!interviews || interviews.length === 0) {
             list.className = 'list-container empty-list-placeholder';
@@ -1323,36 +1390,160 @@ async function renderInterviewsList(projectId) {
             return;
         }
 
+        // Sort by sortOrder if available, otherwise by createdAt
+        interviews.sort((a, b) => {
+            if (a.sortOrder !== undefined && b.sortOrder !== undefined) {
+                return a.sortOrder - b.sortOrder;
+            }
+            const aTime = a.createdAt?.toMillis() || 0;
+            const bTime = b.createdAt?.toMillis() || 0;
+            return bTime - aTime;
+        });
+
         list.className = 'list-container';
-        list.innerHTML = interviews.map(i => {
-            const isDone = i.status === 'completed' || i.status === 'finalized';
-            const statusBadge = isDone
-                ? `<span class="status-badge done">Done</span>`
-                : `<span class="status-badge planned">Planned</span>`;
+        list.innerHTML = interviews.map((i, index) => {
+            const isImported = i.status === 'imported' || i.isImported;
+            const isDone = i.status === 'completed' || i.status === 'finalized' || isImported;
+
+            // Consistent badge styling with borders for all types
+            let statusBadge;
+            if (isImported) {
+                // Imported badge - orange
+                statusBadge = `<span class="status-badge imported" style="background: #fff7ed; color: #ea580c; border: 1px solid #fed7aa; padding: 0.25rem 0.5rem; border-radius: 4px; font-size: 0.75rem; font-weight: 600;">Imported</span>`;
+            } else if (isDone) {
+                // Done badge - orange
+                statusBadge = `<span class="status-badge done" style="background: #fff7ed; color: #ea580c; border: 1px solid #fed7aa; padding: 0.25rem 0.5rem; border-radius: 4px; font-size: 0.75rem; font-weight: 600;">Done</span>`;
+            } else {
+                // Planned badge - grey
+                statusBadge = `<span class="status-badge planned" style="background: #f8fafc; color: #64748b; border: 1px solid #e2e8f0; padding: 0.25rem 0.5rem; border-radius: 4px; font-size: 0.75rem; font-weight: 600;">Planned</span>`;
+            }
+
+            // Same styling for all interviews - more visible boxes
+            const cardStyle = 'padding: 1rem; background: white; border-radius: var(--radius-md); border: 1px solid #e2e8f0; margin-bottom: 0.5rem; display: flex; justify-content: space-between; align-items: center; transition: all 0.2s; user-select: none; box-shadow: 0 1px 3px rgba(0,0,0,0.05);';
+
+            // Icon for imported transcripts - grey color
+            const importIcon = isImported
+                ? `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2" style="margin-right: 0.5rem; flex-shrink: 0;">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                    <polyline points="14 2 14 8 20 8"></polyline>
+                   </svg>`
+                : '';
 
             return `
-            <div class="card-item-row" onclick="handleInterviewClick('${i.id}', '${i.status}')" style="cursor: pointer; padding: 1rem; background: rgba(255,255,255,0.6); border-radius: var(--radius-md); border: 1px solid rgba(0,0,0,0.05); margin-bottom: 0.5rem; display: flex; justify-content: space-between; align-items: center; transition: all 0.2s;">
-                <div>
-                    <div style="font-weight: 600; color: var(--text-title);">${escapeHtml(i.title)}</div>
-                    ${i.participant ? `<div style="font-size: 0.85rem; color: var(--text-muted); margin-top: 0.25rem;">Participant: ${escapeHtml(i.participant)}</div>` : ''}
+            <div class="card-item-row interview-draggable ${isImported ? 'imported-transcript' : ''}" 
+                 draggable="true" 
+                 data-interview-id="${i.id}" 
+                 data-interview-status="${i.status}"
+                 data-index="${index}"
+                 style="${cardStyle}">
+                <div class="interview-drag-handle" style="cursor: grab; padding: 0.5rem; margin-right: 0.5rem; color: #94a3b8; display: flex; align-items: center;">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="9" cy="5" r="1" fill="currentColor"></circle>
+                        <circle cx="9" cy="12" r="1" fill="currentColor"></circle>
+                        <circle cx="9" cy="19" r="1" fill="currentColor"></circle>
+                        <circle cx="15" cy="5" r="1" fill="currentColor"></circle>
+                        <circle cx="15" cy="12" r="1" fill="currentColor"></circle>
+                        <circle cx="15" cy="19" r="1" fill="currentColor"></circle>
+                    </svg>
+                </div>
+                <div class="interview-content" style="display: flex; align-items: center; flex: 1; cursor: pointer;">
+                    ${importIcon}
+                    <div>
+                        <div style="font-weight: 600; color: var(--text-title);">${escapeHtml(i.title)}</div>
+                        ${i.participant ? `<div style="font-size: 0.85rem; color: var(--text-muted); margin-top: 0.25rem;">Participant: ${escapeHtml(i.participant)}</div>` : ''}
+                    </div>
                 </div>
                 <div style="display: flex; align-items: center; gap: 0.75rem;">
                      ${statusBadge}
                     <span style="font-size: 0.85rem; color: var(--text-muted);">
                         ${i.createdAt ? new Date(i.createdAt.toMillis()).toLocaleDateString() : 'Just now'}
                     </span>
-                    <button class="delete-item-btn" onclick="deleteInterview(event, '${i.id}', '${escapeHtml(i.projectId || currentProjectId)}')" style="padding: 0.25rem;">
+                    <button class="delete-item-btn" style="padding: 0.25rem;">
                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                             <polyline points="3 6 5 6 21 6"></polyline>
                             <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
                         </svg>
                     </button>
                 </div>
-            </div >
-                `}).join('');
+            </div>
+                `;
+        }).join('');
+
+        // Initialize drag and drop and click handlers
+        initInterviewDragDrop(list, projectId);
+
     } catch (error) {
         console.error('Error rendering interviews list:', error);
         list.innerHTML = '<p style="text-align: center; color: var(--brand-primary); padding: 1rem;">Error loading interviews</p>';
+    }
+}
+
+// Initialize drag and drop for interview list reordering using SortableJS
+function initInterviewDragDrop(list, projectId) {
+    // Add click handlers for interview content and delete buttons
+    list.querySelectorAll('.interview-draggable').forEach(item => {
+        const interviewId = item.dataset.interviewId;
+        const interviewStatus = item.dataset.interviewStatus;
+
+        // Click handler for interview content (to open the interview)
+        const contentArea = item.querySelector('.interview-content');
+        if (contentArea) {
+            contentArea.addEventListener('click', (e) => {
+                e.stopPropagation();
+                handleInterviewClick(interviewId, interviewStatus);
+            });
+        }
+
+        // Click handler for delete button
+        const deleteBtn = item.querySelector('.delete-item-btn');
+        if (deleteBtn) {
+            deleteBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                deleteInterview(e, interviewId, projectId);
+            });
+        }
+    });
+
+    // Initialize SortableJS if available
+    if (typeof Sortable !== 'undefined') {
+        new Sortable(list, {
+            animation: 150,
+            handle: '.interview-drag-handle',
+            ghostClass: 'sortable-ghost',
+            chosenClass: 'sortable-chosen',
+            dragClass: 'sortable-drag',
+            onEnd: async function (evt) {
+                // Save new order to Firestore
+                await saveInterviewOrder(list, projectId);
+                showToast('Order updated');
+            }
+        });
+    } else {
+        console.warn('SortableJS not loaded - drag and drop disabled');
+    }
+}
+
+// Save the new interview order to Firestore
+async function saveInterviewOrder(list, projectId) {
+    const items = list.querySelectorAll('.interview-draggable');
+    const updates = [];
+
+    items.forEach((item, index) => {
+        const interviewId = item.dataset.interviewId;
+        item.dataset.index = index; // Update index attribute
+        updates.push({
+            id: interviewId,
+            sortOrder: index
+        });
+    });
+
+    // Update each interview's sortOrder in Firestore
+    try {
+        for (const update of updates) {
+            await window.updateInterviewInFirestore(update.id, { sortOrder: update.sortOrder });
+        }
+    } catch (error) {
+        console.error('Error saving interview order:', error);
     }
 }
 
@@ -1372,7 +1563,7 @@ window.deleteGuideline = function (event, projectId, guidelineId) {
 };
 
 window.handleInterviewClick = function (id, status) {
-    if (status === 'completed' || status === 'finalized') {
+    if (status === 'completed' || status === 'finalized' || status === 'imported') {
         loadCompletedInterview(id);
     } else {
         loadInterviewView(id);
@@ -1436,6 +1627,143 @@ async function openCreateInterviewModal() {
 
 function closeCreateInterviewModal() {
     createInterviewModal.classList.add('hidden');
+}
+
+// Open the interview mode selection modal
+function openInterviewModeModal() {
+    interviewModeModal.classList.remove('hidden');
+}
+
+// ===================================
+// IMPORT TRANSCRIPT FUNCTIONS
+// ===================================
+
+function openImportTranscriptModal() {
+    importTranscriptModal.classList.remove('hidden');
+
+    // Reset fields
+    if (importTranscriptTitleInput) importTranscriptTitleInput.value = '';
+    if (importTranscriptParticipantInput) importTranscriptParticipantInput.value = '';
+    clearTranscriptFile();
+}
+
+function closeImportTranscriptModalFn() {
+    importTranscriptModal.classList.add('hidden');
+    clearTranscriptFile();
+}
+
+function clearTranscriptFile() {
+    importedTranscriptText = '';
+    importedTranscriptFile = null;
+    if (transcriptPdfInput) transcriptPdfInput.value = '';
+    if (transcriptFileInfo) transcriptFileInfo.classList.add('hidden');
+    if (transcriptUploadArea) transcriptUploadArea.classList.remove('hidden');
+}
+
+function handleTranscriptFileSelect(e) {
+    const file = e.target.files[0];
+    if (file && file.type === 'application/pdf') {
+        processTranscriptFile(file);
+    } else if (file) {
+        showToast('Please upload a PDF file', 'error');
+    }
+}
+
+async function processTranscriptFile(file) {
+    importedTranscriptFile = file;
+
+    // Show file name
+    if (transcriptFileName) transcriptFileName.textContent = file.name;
+    if (transcriptUploadArea) transcriptUploadArea.classList.add('hidden');
+    if (transcriptFileInfo) transcriptFileInfo.classList.remove('hidden');
+
+    // Parse PDF text
+    try {
+        const arrayBuffer = await file.arrayBuffer();
+        const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+        let fullText = '';
+
+        for (let i = 1; i <= pdf.numPages; i++) {
+            const page = await pdf.getPage(i);
+            const textContent = await page.getTextContent();
+            const pageText = textContent.items.map(item => item.str).join(' ');
+            fullText += pageText + '\n\n';
+        }
+
+        importedTranscriptText = fullText.trim();
+        console.log('Extracted text length:', importedTranscriptText.length);
+    } catch (error) {
+        console.error('Error parsing PDF:', error);
+        showToast('Error reading PDF file', 'error');
+        clearTranscriptFile();
+    }
+}
+
+async function submitImportTranscript() {
+    const title = importTranscriptTitleInput?.value.trim();
+    const participant = importTranscriptParticipantInput?.value.trim();
+
+    if (!title) {
+        alert('Please enter a transcript title.');
+        return;
+    }
+
+    if (!importedTranscriptText) {
+        alert('Please upload a PDF transcript.');
+        return;
+    }
+
+    if (confirmImportTranscriptBtn) {
+        confirmImportTranscriptBtn.disabled = true;
+        confirmImportTranscriptBtn.textContent = 'Importing...';
+    }
+
+    try {
+        // Convert the raw text to transcript segments
+        // Split by double newlines or use the whole text as one segment
+        const paragraphs = importedTranscriptText.split(/\n\n+/).filter(p => p.trim());
+        const segments = paragraphs.map((text, index) => ({
+            id: 'seg_' + Date.now() + '_' + index,
+            text: text.trim(),
+            timestamp: index * 10, // Spread timestamps for ordering
+            notes: [],
+            speaker: null,
+            highlights: []
+        }));
+
+        // Save as a completed/imported interview
+        const interviewData = {
+            title: title,
+            participant: participant,
+            projectId: currentProjectId,
+            status: 'imported', // Special status for imported transcripts
+            isImported: true,
+            transcriptSegments: segments,
+            generalNotes: [],
+            round: '',
+            guidelineId: null
+        };
+
+        const interviewId = await window.saveInterviewToFirestore(interviewData);
+        // Data is saved in initial call, no need for separate update
+
+        closeImportTranscriptModalFn();
+        showToast('Transcript imported successfully');
+
+        // Refresh the interviews list
+        if (currentProjectId) {
+            renderInterviewsList(currentProjectId);
+        }
+
+    } catch (error) {
+        console.error('Failed to import transcript:', error);
+        alert('Failed to import transcript: ' + error.message);
+    } finally {
+        if (confirmImportTranscriptBtn) {
+            confirmImportTranscriptBtn.disabled = false;
+            confirmImportTranscriptBtn.textContent = 'Import transcript';
+        }
+    }
 }
 
 async function submitCreateInterview() {

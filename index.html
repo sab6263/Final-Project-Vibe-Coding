@@ -653,6 +653,65 @@
     <!-- Toast Notification (Optional polish) -->
     <div id="toast" class="toast hidden">Project created</div>
 
+    <!-- Interview Mode Selection Modal -->
+    <div id="interviewModeModal" class="modal-overlay hidden">
+        <div class="modal-container" style="max-width: 500px;">
+            <div class="modal-header">
+                <h2>Add to Interviews</h2>
+                <button id="closeInterviewModeModal" class="icon-btn">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                    </svg>
+                </button>
+            </div>
+            <div class="modal-body">
+                <p style="margin-bottom: 2rem; color: var(--text-muted);">What would you like to add?</p>
+                <div style="display: grid; gap: 1rem;">
+                    <button id="startNewInterviewBtn" class="btn-dashed"
+                        style="padding: 1.5rem; justify-content: flex-start; text-align: left; border: 1px solid var(--border-light); background: white;">
+                        <div
+                            style="background: rgba(234, 88, 12, 0.1); padding: 0.75rem; border-radius: 8px; margin-right: 1rem;">
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                stroke-width="2" style="color: var(--brand-primary);">
+                                <circle cx="12" cy="12" r="10"></circle>
+                                <circle cx="12" cy="12" r="3" fill="currentColor"></circle>
+                            </svg>
+                        </div>
+                        <div>
+                            <strong
+                                style="display: block; color: var(--text-title); font-size: 1.05rem; margin-bottom: 0.25rem;">Start
+                                New Interview</strong>
+                            <span style="font-weight: 400; font-size: 0.9rem;">Record a live interview with
+                                transcription.</span>
+                        </div>
+                    </button>
+
+                    <button id="importTranscriptBtn" class="btn-dashed"
+                        style="padding: 1.5rem; justify-content: flex-start; text-align: left; border: 1px solid var(--border-light); background: white;">
+                        <div
+                            style="background: rgba(59, 130, 246, 0.1); padding: 0.75rem; border-radius: 8px; margin-right: 1rem;">
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                stroke-width="2" style="color: #3b82f6;">
+                                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                                <polyline points="14 2 14 8 20 8"></polyline>
+                                <line x1="12" y1="18" x2="12" y2="12"></line>
+                                <line x1="9" y1="15" x2="15" y2="15"></line>
+                            </svg>
+                        </div>
+                        <div>
+                            <strong
+                                style="display: block; color: var(--text-title); font-size: 1.05rem; margin-bottom: 0.25rem;">Import
+                                Existing Transcript</strong>
+                            <span style="font-weight: 400; font-size: 0.9rem;">Upload a PDF transcript from another
+                                source.</span>
+                        </div>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Create Interview Modal -->
     <div id="createInterviewModal" class="modal-overlay hidden">
         <div class="modal-container">
@@ -692,6 +751,68 @@
             </div>
         </div>
     </div>
+
+    <!-- Import Transcript Modal -->
+    <div id="importTranscriptModal" class="modal-overlay hidden">
+        <div class="modal-container">
+            <div class="modal-header">
+                <h2>Import Transcript</h2>
+                <button id="closeImportTranscriptModal" class="icon-btn">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                    </svg>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div class="input-group">
+                    <label for="importTranscriptTitle">Transcript title <span style="color:red">*</span></label>
+                    <input type="text" id="importTranscriptTitle" placeholder="e.g. External Interview 1"
+                        autocomplete="off">
+                </div>
+                <div class="input-group">
+                    <label for="importTranscriptParticipant">Participant name / ID</label>
+                    <input type="text" id="importTranscriptParticipant" placeholder="e.g. John Doe">
+                </div>
+                <div class="input-group">
+                    <label>Upload PDF transcript <span style="color:red">*</span></label>
+                    <div id="transcriptUploadArea" class="upload-area"
+                        style="border: 2px dashed #e2e8f0; border-radius: 12px; padding: 2rem; text-align: center; cursor: pointer; transition: all 0.2s; background: #f8fafc;">
+                        <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="1.5"
+                            style="margin-bottom: 0.75rem;">
+                            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                            <polyline points="14 2 14 8 20 8"></polyline>
+                            <line x1="12" y1="18" x2="12" y2="12"></line>
+                            <line x1="9" y1="15" x2="15" y2="15"></line>
+                        </svg>
+                        <p style="margin: 0; color: var(--text-muted); font-size: 0.95rem;">Click to upload or drag and
+                            drop</p>
+                        <p style="margin: 0.25rem 0 0 0; color: #94a3b8; font-size: 0.8rem;">PDF files only</p>
+                    </div>
+                    <input type="file" id="transcriptPdfInput" accept="application/pdf" style="display: none;">
+                    <div id="transcriptFileInfo" class="hidden"
+                        style="margin-top: 0.75rem; padding: 0.75rem 1rem; background: #f0fdf4; border: 1px solid #86efac; border-radius: 8px; display: flex; align-items: center; justify-content: space-between;">
+                        <span id="transcriptFileName"
+                            style="font-size: 0.9rem; color: #16a34a; font-weight: 500;"></span>
+                        <button id="removeTranscriptFile" class="icon-btn" style="padding: 0.25rem;">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#dc2626"
+                                stroke-width="2">
+                                <line x1="18" y1="6" x2="6" y2="18"></line>
+                                <line x1="6" y1="6" x2="18" y2="18"></line>
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button id="cancelImportTranscriptBtn" class="btn-secondary">Cancel</button>
+                <button id="confirmImportTranscriptBtn" class="btn-primary">Import transcript</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- SortableJS for drag and drop -->
+    <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
 
     <!-- PDF.js -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
