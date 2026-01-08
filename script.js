@@ -3210,11 +3210,17 @@ async function loadCompletedInterview(interviewId) {
         }
 
         const data = doc.data();
+        console.log('Loaded interview data:', data);
+        console.log('transcriptSegments:', data.transcriptSegments);
+        console.log('transcript:', data.transcript);
 
-        // Re-hydrate globals
+        // Re-hydrate globals - check both 'transcriptSegments' (imported) and 'transcript' (regular)
         currentInterviewId = interviewId;
-        transcriptSegments = data.transcript || [];
+        transcriptSegments = data.transcriptSegments || data.transcript || [];
         generalNotes = data.generalNotes || [];
+
+        console.log('Final transcriptSegments:', transcriptSegments);
+        console.log('Number of segments:', transcriptSegments.length);
 
         // Ensure interviewDetailTitle is available if needed, though openReview sets reviewTitle from it
         // We might need to manually set reviewTitle since interviewDetailTitle element might still contain 'Loading...' or old data
