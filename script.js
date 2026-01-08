@@ -1720,16 +1720,125 @@ async function submitImportTranscript() {
 
     try {
         // Convert the raw text to transcript segments
-        // Split by double newlines or use the whole text as one segment
-        const paragraphs = importedTranscriptText.split(/\n\n+/).filter(p => p.trim());
-        const segments = paragraphs.map((text, index) => ({
-            id: 'seg_' + Date.now() + '_' + index,
-            text: text.trim(),
-            timestamp: index * 10, // Spread timestamps for ordering
-            notes: [],
-            speaker: null,
-            highlights: []
-        }));
+        // Extended speaker patterns to handle various formats found in interview transcripts
+
+        // Build comprehensive pattern to match all speaker markers
+        // Interviewer patterns: I, INT, Interviewer, Interviewer (I), Interviewer (R1), Moderator, Facilitator, Researcher, Fieldworker, Q
+        // Participant patterns: P, P1, P-1, P - 1, P - 01, Participant, Participant #1, Participant One, Interviewee, Respondent, Speaker, A
+        const speakerMarkers = [
+            // Interviewer variations
+            'Interviewer\\s*(?:\\([^)]*\\))?:', // Interviewer:, Interviewer (I):, Interviewer (R1):, Interviewer (INT):
+            'INT:', // Common abbreviation
+            'I\\s*-?\\s*\\d*:', // I:, I1:, I-1:, I - 1:
+            'Q:', // Question
+            'Moderator:', 'Mod:',
+            'Facilitator:',
+            'Researcher:',
+            'Fieldworker:',
+
+            // Participant variations
+            'Participant\\s*(?:#?\\d+|One|Two|Three|Four|Five|[A-Z])?\\s*(?:\\([^)]*\\))?:', // Participant:, Participant 1:, Participant #1:, Participant One:, Participant (P):
+            'P\\s*-?\\s*\\d*\\s*(?:\\([^)]*\\))?:', // P:, P1:, P-1:, P - 1:, P - 01:, P1 (Interviewee):
+            'A:', // Answer
+            'Speaker\\s*(?:#?\\d*)?:',
+            'Interviewee\\s*(?:\\([^)]*\\))?:',
+            'Respondent\\s*(?:#?\\d*)?:',
+            'Subject\\s*(?:#?\\d*)?:',
+            'User\\s*(?:#?\\d*)?:'
+        ];
+        const speakerPatternStr = '(?:' + speakerMarkers.join('|') + ')';
+        const speakerPattern = new RegExp('(?:^|\\s)(' + speakerPatternStr + ')', 'gi');
+
+        let segments = [];
+        let text = importedTranscriptText;
+
+        // Check if text has speaker markers
+        const hasMarkers = speakerPattern.test(text);
+        speakerPattern.lastIndex = 0; // Reset regex
+
+        if (hasMarkers) {
+            // Split by speaker markers - use lookahead to keep the marker with the text
+            const splitPattern = new RegExp('(?=\\s*' + speakerPatternStr + ')', 'gi');
+            const parts = text.split(splitPattern);
+
+            parts.forEach((part, index) => {
+                const trimmedPart = part.trim();
+                if (!trimmedPart) return;
+
+                // Detect speaker from the start of the text
+                let speaker = null;
+                let cleanText = trimmedPart;
+
+                // Check for interviewer markers
+                const interviewerMatch = /^(?:Interviewer\s*(?:\([^)]*\))?:|INT:|I\s*-?\s*\d*:|Q:|Moderator:|Mod:|Facilitator:|Researcher:|Fieldworker:)\s*/i;
+                // Check for participant markers
+                const participantMatch = /^(?:Participant\s*(?:#?\d+|One|Two|Three|Four|Five|[A-Z])?\s*(?:\([^)]*\))?:|P\s*-?\s*\d*\s*(?:\([^)]*\))?:|A:|Speaker\s*(?:#?\d*)?:|Interviewee\s*(?:\([^)]*\))?:|Respondent\s*(?:#?\d*)?:|Subject\s*(?:#?\d*)?:|User\s*(?:#?\d*)?:)\s*/i;
+
+                if (interviewerMatch.test(trimmedPart)) {
+                    speaker = 'interviewer';
+                    cleanText = trimmedPart.replace(interviewerMatch, '').trim();
+                }
+                else if (participantMatch.test(trimmedPart)) {
+                    speaker = 'participant';
+                    cleanText = trimmedPart.replace(participantMatch, '').trim();
+                }
+
+                // If this is the first part and has no speaker, it might be a header/intro
+                // Skip if it's very short (likely just a title) or add as unmarked segment
+                if (index === 0 && !speaker && cleanText.length < 100) {
+                    // Skip document headers like "Interview Transcript"
+                    return;
+                }
+
+                if (cleanText) {
+                    segments.push({
+                        id: 'seg_' + Date.now() + '_' + segments.length,
+                        text: cleanText,
+                        timestamp: segments.length * 10,
+                        notes: [],
+                        speaker: speaker,
+                        highlights: []
+                    });
+                }
+            });
+        } else {
+            // No speaker markers found - split by paragraphs or sentences
+            // Try double newlines first, then single newlines, then by periods for long text
+            let paragraphs = text.split(/\n\n+/).filter(p => p.trim());
+
+            // If only one paragraph, try splitting by single newlines
+            if (paragraphs.length <= 1) {
+                paragraphs = text.split(/\n/).filter(p => p.trim());
+            }
+
+            // If still only one or text is very long, split by sentences
+            if (paragraphs.length <= 1 && text.length > 500) {
+                paragraphs = text.split(/(?<=[.!?])\s+/).filter(p => p.trim());
+            }
+
+            segments = paragraphs.map((para, index) => ({
+                id: 'seg_' + Date.now() + '_' + index,
+                text: para.trim(),
+                timestamp: index * 10,
+                notes: [],
+                speaker: null,
+                highlights: []
+            }));
+        }
+
+        // Ensure at least one segment
+        if (segments.length === 0) {
+            segments.push({
+                id: 'seg_' + Date.now() + '_0',
+                text: text.trim() || 'No text extracted from PDF',
+                timestamp: 0,
+                notes: [],
+                speaker: null,
+                highlights: []
+            });
+        }
+
+        console.log('Created', segments.length, 'segments from imported PDF');
 
         // Save as a completed/imported interview
         const interviewData = {
@@ -3165,14 +3274,20 @@ function renderReview() {
 async function saveReviewChanges() {
     if (!currentInterviewId) return;
 
+    // Sync all currently editing segments before saving
+    syncAllEditableSegments();
+
     // Provide visual feedback
     const originalText = saveReviewBtn.textContent;
     saveReviewBtn.textContent = 'Saving...';
     saveReviewBtn.disabled = true;
 
     try {
+        // Save to both 'transcript' and 'transcriptSegments' for compatibility
+        // Regular interviews use 'transcript', imported use 'transcriptSegments'
         await db.collection('interviews').doc(currentInterviewId).update({
             transcript: transcriptSegments,
+            transcriptSegments: transcriptSegments,
             generalNotes: generalNotes,
             updatedAt: firebase.firestore.FieldValue.serverTimestamp()
         });
@@ -3198,6 +3313,27 @@ async function saveReviewChanges() {
         }, 2000);
         showToast('Failed to save changes', 'error');
     }
+}
+
+// Helper function to sync all editable segments to the data model
+function syncAllEditableSegments() {
+    const editableSpans = document.querySelectorAll('.review-segment span[contenteditable="true"]');
+    editableSpans.forEach(textSpan => {
+        const segmentDiv = textSpan.closest('.review-segment');
+        if (!segmentDiv) return;
+
+        const segmentId = segmentDiv.getAttribute('data-segment-id');
+        const segment = transcriptSegments.find(s => s.id === segmentId);
+
+        if (segment) {
+            const currentText = textSpan.innerText;
+            const currentHtml = textSpan.innerHTML;
+
+            // Update the segment data
+            segment.text = currentText;
+            segment.html = currentHtml;
+        }
+    });
 }
 
 
