@@ -3644,6 +3644,7 @@ function setupReviewModeListeners() {
 
             updateToolbarModes();
             renderReview(); // Re-render to update visibility
+            enableTextSelection(); // Ensure listeners are removed
         };
     }
 
@@ -3654,6 +3655,7 @@ function setupReviewModeListeners() {
             reviewCodingMode = false;
             updateToolbarModes();
             renderReview(); // Re-render to update visibility
+            enableTextSelection(); // Ensure listeners are removed
         };
     }
 
