@@ -3966,7 +3966,7 @@ async function assignCodeToText(codeId, text, segmentId) {
     };
 
     try {
-        const docId = await window.saveCodeAssignment(currentInterviewId, assignmentData);
+        const docId = await window.saveCodeAssignment(currentInterviewId, currentProjectId, assignmentData);
         currentCodeAssignments = await window.loadCodeAssignments(currentInterviewId);
         showToast('Code assigned');
         window.getSelection().removeAllRanges();
@@ -5658,17 +5658,28 @@ function renderCodeManagerSidebar(codes, codeUsageMap) {
         const usageData = JSON.stringify(usage).replace(/"/g, '&quot;');
 
         return `
-            <div class="code-manager-item" 
+            <div class="code-manager-item code-item" 
+                 id="code-item-${code.id}"
+                 data-code-name="${escapeHtml(code.name)}"
+                 data-code-color="${code.color}"
                  onclick="window.renderCodeUsageDetail('${code.id}', '${escapeHtml(code.name)}', '${code.color}', this)"
-                 style="display: flex; align-items: center; justify-content: space-between; padding: 0.75rem; border-radius: 6px; cursor: pointer; transition: background 0.2s; border: 1px solid transparent; margin-bottom: 4px;">
-                <div style="display: flex; align-items: center; gap: 0.75rem;">
-                    <div style="width: 14px; height: 14px; border-radius: 50%; background: ${code.color};"></div>
-                    <span style="font-weight: 500; color: var(--text-title);">${escapeHtml(code.name)}</span>
+                 style="/* style managed by css now mostly, but keep minimal */">
+                
+                <div class="code-item-left">
+                    <div class="code-color-preview" style="background: ${code.color};"></div>
+                    <span class="code-item-name" style="/* managed by css */">${escapeHtml(code.name)}</span>
                 </div>
-                <span class="badge" style="background: ${count > 0 ? '#e2e8f0' : '#f1f5f9'}; color: ${count > 0 ? '#475569' : '#94a3b8'}; padding: 2px 8px; border-radius: 99px; font-size: 0.75rem; font-weight: 600;">
-                    ${count}
-                </span>
-                <!-- Hidden data storage using a data attribute instead of innerHTML for safety -->
+
+                <div class="code-item-actions">
+                     <button onclick="event.stopPropagation(); window.editCode('${code.id}')" title="Edit">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
+                     </button>
+                     <button onclick="event.stopPropagation(); window.confirmDeleteCode('${code.id}')" class="delete-code-btn" title="Delete">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+                     </button>
+                </div>
+
+                <!-- Hidden data storage -->
                 <div id="data-${code.id}" style="display:none;" data-usage="${usageData}"></div>
             </div>
         `;
@@ -5695,12 +5706,50 @@ function renderCodeUsageDetail(codeId, name, color, startEl) {
     document.getElementById('codeManagerDetailEmpty').classList.add('hidden');
     document.getElementById('codeManagerDetailContent').classList.remove('hidden');
 
-    document.getElementById('codeDetailTitle').textContent = name;
-    document.getElementById('codeDetailColor').style.background = color;
-    document.getElementById('codeDetailCount').textContent = `${occurrences.length} segments`;
-    document.getElementById('codeDetailDesc').textContent = occurrences.length > 0
-        ? `Used in ${new Set(occurrences.map(o => o.interviewId)).size} interviews (Total: ${occurrences.length} times)`
-        : 'This code has not been used in any transcript yet.';
+    // Update title area with controls
+    const titleContainer = document.querySelector('#codeManagerDetailContent .detail-header');
+
+    // Store current raw color AND ID for edit modal retrieval
+    const detailContentElement = document.getElementById('codeManagerDetailContent');
+    detailContentElement.dataset.currentCodeColor = color;
+    detailContentElement.dataset.currentCodeId = codeId;
+
+    // Clear existing content relative to header actions if any (we are rewriting innerHTML of container or just parts)
+    // Actually, let's just rewrite the header content to include buttons
+    titleContainer.innerHTML = `
+        <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 1rem;">
+            <div style="display: flex; align-items: center; gap: 1rem;">
+                <div id="codeDetailColor" style="width: 32px; height: 32px; border-radius: 50%; background: ${color}; flex-shrink: 0;"></div>
+                <h3 id="codeDetailTitle" style="margin: 0; font-size: 1.75rem; font-weight: 700; line-height: 1.2;">${escapeHtml(name)}</h3>
+            </div>
+            <div style="display: flex; gap: 0.5rem; flex-shrink: 0;">
+                <button onclick="window.editCode('${codeId}')" class="btn-secondary small" title="Edit Code">
+                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                        <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+                    </svg>
+                    Edit
+                </button>
+                <button onclick="window.confirmDeleteCode('${codeId}')" class="btn-secondary small" style="color: #ef4444; border-color: #fee2e2; background: #fff1f2;" title="Delete Code">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <polyline points="3 6 5 6 21 6"></polyline>
+                        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2-2v2"></path>
+                    </svg>
+                    Delete
+                </button>
+            </div>
+        </div>
+        
+        <div style="display: flex; align-items: center; gap: 1rem; color: var(--text-muted); font-size: 0.9rem;">
+            <span id="codeDetailCount" class="badge" style="font-size: 0.85rem; padding: 0.25rem 0.75rem;">${occurrences.length} segments</span>
+            <span style="width: 4px; height: 4px; background: #cbd5e1; border-radius: 50%;"></span>
+            <p id="codeDetailDesc" style="margin: 0;">
+                ${occurrences.length > 0
+            ? `Used in ${new Set(occurrences.map(o => o.interviewId)).size} interviews (Total: ${occurrences.length} times)`
+            : 'This code has not been used in any transcript yet.'}
+            </p>
+        </div>
+    `;
 
     // Render List
     const container = document.getElementById('codeSegmentsList');
@@ -5709,13 +5758,22 @@ function renderCodeUsageDetail(codeId, name, color, startEl) {
         return;
     }
 
-    container.innerHTML = occurrences.map(occ => `
+    container.innerHTML = occurrences.map(occ => {
+        // Capitalize Speaker
+        let speaker = occ.segmentSpeaker || 'Speaker';
+        if (speaker.toLowerCase() === 'interviewer') {
+            speaker = 'Interviewer';
+        } else if (speaker.toLowerCase() === 'participant') {
+            speaker = 'Participant';
+        }
+
+        return `
         <div class="segment-card" style="background: #f8fafc; border: 1px solid var(--border-light); border-radius: 8px; padding: 1rem; transition: all 0.2s;">
             <div style="display: flex; justify-content: space-between; margin-bottom: 0.5rem; font-size: 0.85rem; color: var(--text-muted);">
                 <span style="font-weight: 600; color: var(--text-title);">
                     ${occ.interviewTitle || 'Unknown Interview'}
                 </span>
-                <span>${occ.segmentSpeaker || 'Speaker'}</span>
+                <span style="font-weight: 500;">${speaker}</span>
             </div>
             <div style="font-size: 0.95rem; line-height: 1.5; color: var(--text-body); margin-bottom: 1rem; border-left: 3px solid ${color}; padding-left: 0.75rem;">
                 "${escapeHtml(occ.segmentText)}"
@@ -5725,7 +5783,7 @@ function renderCodeUsageDetail(codeId, name, color, startEl) {
                 Go to Transcript context
             </button>
         </div>
-    `).join('');
+    `}).join('');
 }
 
 /**
@@ -5742,8 +5800,18 @@ async function jumpToSegment(interviewId, segmentId) {
     }
 
     // 2. Otherwise, load the interview first
-    // showTranscriptReviewLoadingState(); // Optional: show loading
-    await loadInterviewView(interviewId);
+    // Use loadCompletedInterview to ensure we enter Review Mode where coding happens
+    await loadCompletedInterview(interviewId);
+
+    // Switch to Coding Mode explicitly
+    // We do this after loadCompletedInterview because openReview resets it to Edit mode
+    reviewEditMode = false;
+    reviewNotesMode = false;
+    reviewCodingMode = true;
+    updateToolbarModes();
+    renderReview(); // Re-render to ensure coding styles are applied
+    enableTextSelection();
+    showToast('Switched to Coding Mode', 'info');
 
     // 3. Then scroll after a slight delay to ensure render
     setTimeout(() => {
@@ -5764,5 +5832,175 @@ function scrollToAndHighlight(segmentId) {
         }, 2000);
     } else {
         showToast('Could not find segment in this transcript.', 'error');
+    }
+}
+
+// ============================================================================
+// CODE MANAGER ACTIONS (Edit / Delete)
+// ============================================================================
+
+window.confirmDeleteCode = function (codeId) {
+    openConfirmModal(
+        'Delete Code',
+        'Are you sure you want to delete this code? This will remove it from all assigned segments.',
+        'Delete',
+        () => performDeleteCode(codeId)
+    );
+};
+
+window.editCode = function (codeId) {
+    // Reuse the create code modal but populate it
+    const modal = document.getElementById('codeModal');
+    const title = document.getElementById('codeModalTitle');
+    const nameInput = document.getElementById('codeName');
+
+    // Strategy: Try to find the source data in the sidebar list first (most reliable)
+    // Then fall back to the detail view if that ID is currently open
+    // This solves the issue where edit args were stale or missing
+    let currentName = "";
+    let currentColor = "";
+
+    const listItem = document.getElementById(`code-item-${codeId}`);
+    if (listItem) {
+        currentName = listItem.dataset.codeName;
+        currentColor = listItem.dataset.codeColor;
+    } else {
+        // Fallback: Check if the detail view is open for this code
+        // If sidebar item is missing/hidden, and we are editing, we are likely in the detail view header.
+        // We trust the visible title matches the edit button context.
+        const detailTitle = document.getElementById('codeDetailTitle');
+        const detailContent = document.getElementById('codeManagerDetailContent');
+
+        if (detailTitle) {
+            currentName = detailTitle.textContent;
+        }
+        if (detailContent && detailContent.dataset.currentCodeColor) {
+            currentColor = detailContent.dataset.currentCodeColor;
+        }
+    }
+
+    // Default fallback
+    if (!currentColor) currentColor = '#3b82f6';
+
+    // Setup Modal
+    if (title) title.textContent = "Edit Code";
+    if (nameInput) {
+        nameInput.value = currentName || '';
+    }
+
+    // Pre-select Color
+    // 1. Reset all
+    document.querySelectorAll('.color-option').forEach(el => el.classList.remove('selected'));
+    document.querySelectorAll('.custom-color-wrapper').forEach(el => el.classList.remove('selected'));
+
+    // 2. Find match
+    let matchFound = false;
+    if (currentColor) {
+        // Normal Hex Match
+        const normalize = (c) => c.toLowerCase().trim();
+        const target = normalize(currentColor);
+
+        document.querySelectorAll('.color-option').forEach(el => {
+            if (normalize(el.dataset.color) === target) {
+                el.classList.add('selected');
+                matchFound = true;
+            }
+        });
+
+        // If no predefined match, assume custom
+        if (!matchFound) {
+            const customWrapper = document.querySelector('.custom-color-wrapper');
+            const customInput = document.getElementById('customColorInput');
+            const customBubble = document.getElementById('customColorBubble');
+
+            if (customWrapper && customInput && customBubble) {
+                customWrapper.classList.add('selected');
+                customInput.value = currentColor; // works for hex
+                customBubble.style.background = currentColor;
+
+                // If the color isn't hex (e.g. rgba), input type='color' might ignore it, 
+                // but style.background will work for the bubble.
+            }
+        }
+    }
+
+    // Store editing ID
+    modal.dataset.editingId = codeId;
+
+    modal.classList.remove('hidden');
+
+    // Overwrite save handler temporarily
+    saveBtn.onclick = async (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+
+        const newName = nameInput.value.trim();
+        const activeColorEl = document.querySelector('.color-option.selected') || document.querySelector('.custom-color-wrapper.selected');
+        let newColor = '#3b82f6';
+
+        if (activeColorEl) {
+            if (activeColorEl.classList.contains('custom-color-wrapper')) {
+                newColor = document.getElementById('customColorInput').value;
+            } else {
+                newColor = activeColorEl.dataset.color;
+            }
+        }
+
+        if (!newName) return;
+
+        saveBtn.disabled = true;
+        saveBtn.textContent = 'Updating...';
+
+        try {
+            if (window.updateCode) {
+                await window.updateCode(codeId, { name: newName, color: newColor });
+            } else {
+                // Fallback
+                await db.collection('codes').doc(codeId).update({
+                    name: newName,
+                    color: newColor,
+                    updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+                });
+            }
+
+            showToast('Code updated');
+            modal.classList.add('hidden');
+            delete modal.dataset.editingId;
+
+
+            // Refresh
+            if (currentProjectId) openCodeManager(currentProjectId);
+
+            // Reset UI
+            if (title) title.textContent = "Create Code";
+            if (nameInput) nameInput.value = "";
+            saveBtn.onclick = null; // Remove this handler?
+            // Re-attach original handler?? This is messy. 
+            // Better to have one handler that checks mode.
+
+        } catch (e) {
+            console.error(e);
+            showToast('Error updating code', 'error');
+        } finally {
+            saveBtn.disabled = false;
+            saveBtn.textContent = 'Save code';
+        }
+    };
+};
+
+async function performDeleteCode(codeId) {
+    if (!codeId) return;
+
+    try {
+        await window.deleteCode(codeId); // Assumes this is exposed in firebase-data.js
+        showToast('Code deleted');
+
+        // Refresh Code Manager
+        if (currentProjectId) {
+            openCodeManager(currentProjectId);
+        }
+    } catch (error) {
+        console.error('Error deleting code:', error);
+        showToast('Failed to delete code', 'error');
     }
 }

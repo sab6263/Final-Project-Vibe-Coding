@@ -1972,65 +1972,69 @@ input:checked+.slider:before {
     flex-shrink: 0;
 }
 
-/* Code List Item */
-.code-item {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 0.875rem 1rem;
+/* Code List Grid Layout */
+#codesList {
+    background: #f8fafc !important;
+    display: grid !important;
+    grid-template-columns: repeat(2, 1fr) !important;
+    /* Force 2 columns */
+    gap: 0.5rem !important;
+    padding: 0 1rem 1rem 1rem !important;
+}
+
+#codesList .code-item {
     background: white;
-    border: 1px solid #e2e8f0;
-    border-radius: var(--radius-md);
-    margin-bottom: 0.5rem;
-    transition: all 0.2s;
+    border: 1px solid #cbd5e1 !important;
+    /* Darker border for better visibility */
+    border-radius: 6px;
+    padding: 0.5rem;
+    display: flex !important;
+    flex-direction: row !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+    margin-bottom: 0;
+    min-height: 48px;
+    width: 100%;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+    /* Subtle depth */
 }
 
-.code-item:hover {
-    border-color: #cbd5e1;
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
-}
-
-.code-item-left {
-    display: flex;
-    align-items: center;
-    gap: 0.75rem;
-    flex: 1;
-}
-
+/* Ensure the Color Circle is Visible */
 .code-color-preview {
-    width: 24px;
-    height: 24px;
+    width: 14px;
+    height: 14px;
     border-radius: 50%;
     flex-shrink: 0;
-    border: 2px solid rgba(0, 0, 0, 0.1);
+    border: 1px solid rgba(0, 0, 0, 0.1);
+    display: block !important;
+    /* Ensure visibility */
 }
 
-.code-item-info {
+#codesList .code-item-left {
     display: flex;
-    flex-direction: column;
-    gap: 0.15rem;
+    align-items: center;
+    gap: 0.6rem;
+    flex: 1;
+    min-width: 0;
+    /* Allow truncation */
+    margin-bottom: 0 !important;
 }
 
-.code-item-name {
-    font-weight: 600;
-    color: var(--text-title);
-    font-size: 0.95rem;
+#codesList .code-item-name {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-size: 0.9rem;
+    font-weight: 500;
 }
 
-.code-item-description {
-    font-size: 0.8rem;
-    color: var(--text-muted);
-}
-
-.code-item-actions {
+#codesList .code-item-actions {
     display: flex;
-    gap: 0.5rem;
-    opacity: 0;
-    transition: opacity 0.2s;
-}
-
-.code-item:hover .code-item-actions {
-    opacity: 1;
+    gap: 0.25rem;
+    margin-left: 0.5rem;
+    margin-top: 0 !important;
+    /* Ensure buttons fit */
+    flex-shrink: 0;
 }
 
 .code-item-actions button {
@@ -2054,4 +2058,37 @@ input:checked+.slider:before {
     background: #fef2f2;
     border-color: #fecaca;
     color: #ef4444;
+}
+
+/* Analyze Button Visibility Enhancement */
+#openCodeManagerBtn {
+    background: white;
+    color: var(--text-title);
+    font-weight: 700;
+    border: 1px solid #cbd5e1;
+    padding: 0.6rem 1.25rem;
+    height: auto;
+    border-radius: var(--radius-md);
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    transition: all 0.2s cubic-bezier(0.2, 0.8, 0.2, 1);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+}
+
+#openCodeManagerBtn:hover {
+    border-color: var(--brand-primary);
+    background: #fff7ed;
+    /* Light orange tint */
+    color: var(--brand-primary);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(234, 88, 12, 0.15);
+}
+
+#openCodeManagerBtn svg {
+    transition: transform 0.2s;
+}
+
+#openCodeManagerBtn:hover svg {
+    transform: scale(1.1);
 }

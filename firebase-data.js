@@ -745,13 +745,14 @@ async function loadCodesForProject(projectId) {
 /**
  * Save a code assignment to text in transcript
  */
-async function saveCodeAssignment(interviewId, assignmentData) {
+async function saveCodeAssignment(interviewId, projectId, assignmentData) {
     if (!currentUser || !interviewId) return null;
 
     try {
         const docRef = await db.collection('codeAssignments').add({
             userId: currentUser.uid,
             interviewId: interviewId,
+            projectId: projectId || null,
             codeId: assignmentData.codeId,
             segmentId: assignmentData.segmentId,
             startOffset: assignmentData.startOffset,
@@ -847,33 +848,53 @@ window.deleteCodeAssignment = deleteCodeAssignment;
 /**
  * Aggregate all coded segments across all interviews in a project
  */
+/**
+ * Aggregate all coded segments across all interviews in a project
+ */
 window.getAllCodedSegments = async function (projectId) {
     if (!currentUser || !projectId) return [];
 
     try {
-        // Reuse existing fetch
+        // 1. Fetch all interviews for this project to get titles and context
         const interviews = await window.loadInterviewsForProject(projectId);
+        const interviewIds = interviews.map(i => i.id);
+        const interviewMap = {};
+        interviews.forEach(i => interviewMap[i.id] = i);
+
+        if (interviewIds.length === 0) return [];
+
+        // 2. Fetch codeAssignments for this user
+        // We filter by projectId (new) or interviewId (old)
+        const assignmentsSnapshot = await db.collection('codeAssignments')
+            .where('userId', '==', currentUser.uid)
+            .get();
+
+        const projectAssignments = assignmentsSnapshot.docs
+            .map(doc => ({ id: doc.id, ...doc.data() }))
+            .filter(a => a.projectId === projectId || interviewIds.includes(a.interviewId));
+
         let allCodedSegments = [];
 
-        interviews.forEach(interview => {
+        projectAssignments.forEach(attr => {
+            const interview = interviewMap[attr.interviewId];
+            if (!interview) return;
+
+            // Find speaker for the segment
+            let speaker = 'Unknown';
             if (interview.transcriptSegments && Array.isArray(interview.transcriptSegments)) {
-                interview.transcriptSegments.forEach(segment => {
-                    if (segment.codes && segment.codes.length > 0) {
-                        // Fan-out: One entry per code assignment
-                        segment.codes.forEach(codeId => {
-                            allCodedSegments.push({
-                                codeId: codeId,
-                                segmentId: segment.id,
-                                segmentText: segment.text,
-                                segmentSpeaker: segment.speaker,
-                                interviewId: interview.id,
-                                interviewTitle: interview.title,
-                                interviewDate: interview.createdAt
-                            });
-                        });
-                    }
-                });
+                const seg = interview.transcriptSegments.find(s => s.id === attr.segmentId);
+                if (seg) speaker = seg.speaker || 'Unknown';
             }
+
+            allCodedSegments.push({
+                codeId: attr.codeId,
+                segmentId: attr.segmentId,
+                segmentText: attr.text || ' (No text captured) ',
+                segmentSpeaker: speaker,
+                interviewId: attr.interviewId,
+                interviewTitle: interview.title || 'Untitled Interview',
+                interviewDate: attr.createdAt || interview.createdAt
+            });
         });
 
         return allCodedSegments;
