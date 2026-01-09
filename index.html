@@ -920,11 +920,26 @@
                 <!-- Left Sidebar: Code List -->
                 <div class="code-manager-sidebar"
                     style="border-right: 1px solid var(--border-light); padding: 1rem; overflow-y: auto; background: #f8fafc;">
-                    <div class="search-box" style="margin-bottom: 1rem;">
-                        <input type="text" id="codeManagerSearch" placeholder="Search codes..."
-                            style="width: 100%; padding: 0.5rem; border-radius: 6px; border: 1px solid var(--border-light);">
+                    <div
+                        style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+                        <h3 style="font-size: 1rem; font-weight: 600; color: var(--text-title); margin: 0;">All Codes
+                        </h3>
                     </div>
-                    <div id="codeManagerList" class="code-list-tree">
+
+                    <div class="search-box" style="margin-bottom: 1rem; position: relative;">
+                        <input type="text" id="codeManagerSearch" placeholder="Search codes..."
+                            style="width: 100%; padding: 0.5rem 0.75rem 0.5rem 2rem; border-radius: 6px; border: 1px solid var(--border-light); font-size: 0.9rem;"
+                            onkeyup="window.filterCodeManagerList(this.value)">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2"
+                            style="position: absolute; left: 0.75rem; top: 50%; transform: translateY(-50%); color: var(--text-muted); pointer-events: none;">
+                            <circle cx="11" cy="11" r="8"></circle>
+                            <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                        </svg>
+                    </div>
+
+                    <div id="codeManagerList" class="code-list-tree"
+                        style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 0.5rem;">
                         <!-- Codes will be injected here -->
                         <div style="text-align: center; color: var(--text-muted); padding: 1rem;">Loading...</div>
                     </div>
