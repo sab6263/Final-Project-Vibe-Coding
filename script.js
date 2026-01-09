@@ -577,11 +577,20 @@ let selectedColor = '#3b82f6'; // Default blue
 /**
  * Render codes list for a project
  */
+/**
+ * Render codes list for a project
+ */
 async function renderCodesList(projectId) {
     const list = document.getElementById('codesList');
-    if (!list) return;
+    if (!list) {
+        console.warn('codesList element not found');
+        return;
+    }
 
     try {
+        list.className = 'list-container loading-state';
+        list.innerHTML = '<p>Loading codes...</p>';
+
         const codes = await window.loadCodesForProject(projectId);
 
         if (!codes || codes.length === 0) {
@@ -596,7 +605,7 @@ async function renderCodesList(projectId) {
                 <div class="code-item-left">
                     <div class="code-color-preview" style="background: ${code.color};"></div>
                     <div class="code-item-info">
-                        <div class="code-item-name">${escapeHtml(code.name)}</div>
+                        <div class="code-item-name">${escapeHtml(code.name || 'Untitled')}</div>
                     </div>
                 </div>
                 <div class="code-item-actions">
@@ -711,20 +720,28 @@ async function saveCode() {
         color: selectedColor
     };
 
+    // Capture projectId before potentially clearing data
+    const projectId = currentCodeData.projectId;
+    const codeId = currentCodeData.codeId;
+
     try {
-        if (currentCodeData.codeId) {
+        if (codeId) {
             // Update existing code
-            await window.updateCodeInFirestore(currentCodeData.projectId, currentCodeData.codeId, codeData);
+            await window.updateCodeInFirestore(projectId, codeId, codeData);
             showToast('Code updated');
         } else {
             // Create new code
-            await window.saveCodeToFirestore(currentCodeData.projectId, codeData);
+            await window.saveCodeToFirestore(projectId, codeData);
             showToast('Code created');
         }
 
-        const projectId = currentCodeData.projectId;
         closeCodeModal();
-        renderCodesList(projectId);
+        await renderCodesList(projectId);
+
+        // If we are in review mode, update that list too
+        if (typeof transcriptReviewView !== 'undefined' && !transcriptReviewView.classList.contains('hidden')) {
+            await loadCodesForReview();
+        }
     } catch (error) {
         console.error('Error saving code:', error);
         alert('Failed to save code. Please try again.');
@@ -3656,8 +3673,6 @@ function setupReviewModeListeners() {
         newCodeFromReview.onclick = () => {
             if (currentProjectId) {
                 openCodeModal(currentProjectId);
-                // Reload codes after creating
-                setTimeout(() => loadCodesForReview(), 500);
             }
         };
     }
