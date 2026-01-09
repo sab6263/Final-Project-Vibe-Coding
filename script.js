@@ -635,7 +635,7 @@ function renderFilteredCodes() {
 
     list.className = 'list-container';
     list.innerHTML = filteredCodes.map(code => `
-        <div class="code-item" data-code-id="${code.id}">
+        <div id="code-item-${code.id}" class="code-item" data-code-id="${code.id}" data-code-name="${escapeHtml(code.name || '')}" data-code-color="${code.color}" onclick="openCodeManager('${currentProjectId}', '${code.id}')" style="cursor: pointer;">
             <div class="code-item-left">
                 <div class="code-color-preview" style="background: ${code.color};"></div>
                 <div class="code-item-info">
@@ -643,13 +643,13 @@ function renderFilteredCodes() {
                 </div>
             </div>
             <div class="code-item-actions">
-                <button onclick="window.editCode('${currentProjectId}', '${code.id}')" title="Edit code">
+                <button onclick="event.stopPropagation(); window.editCode('${currentProjectId}', '${code.id}')" title="Edit code">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
                         <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
                     </svg>
                 </button>
-                <button class="delete-code-btn" onclick="window.deleteCodeWithConfirm('${code.id}')" title="Delete code">
+                <button class="delete-code-btn" onclick="event.stopPropagation(); window.deleteCodeWithConfirm('${code.id}')" title="Delete code">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <polyline points="3 6 5 6 21 6"></polyline>
                         <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2-2v2"></path>
@@ -5877,7 +5877,7 @@ window.confirmDeleteCode = function (codeId) {
     );
 };
 
-window.editCode = function (codeId) {
+window.editCode = function (projectId, codeId) {
     // Reuse the create code modal but populate it
     const modal = document.getElementById('codeModal');
     const title = document.getElementById('codeModalTitle');
@@ -6033,3 +6033,154 @@ async function performDeleteCode(codeId) {
         showToast('Failed to delete code', 'error');
     }
 }
+// ============================================================================
+// CODE MANAGER IMPLEMENTATION
+// ============================================================================
+
+window.openCodeManager = async function (projectId, initialCodeId = null) {
+    if (!projectId) return;
+
+    const modal = document.getElementById('codeManagerModal');
+    if (!modal) return;
+
+    modal.classList.remove('hidden');
+
+    // Reset UI
+    document.getElementById('managerDetailHeader').style.display = 'block';
+
+    // Load codes if not loaded
+    if (!currentProjectCodes || currentProjectCodes.length === 0) {
+        currentProjectCodes = await window.loadCodesForProject(projectId);
+    }
+
+    renderManagerSidebar(currentProjectCodes, initialCodeId);
+
+    if (initialCodeId) {
+        const code = currentProjectCodes.find(c => c.id === initialCodeId);
+        if (code) {
+            selectCodeInManager(projectId, code);
+        }
+    } else {
+        // Reset main view
+        document.getElementById('managerSelectedCodeName').textContent = 'Select a code';
+        document.getElementById('managerSelectedCodeMeta').textContent = 'No code selected';
+        document.getElementById('managerUsageList').innerHTML = '<div style="text-align: center; color: var(--text-muted); margin-top: 3rem;">Select a code to see its usage across interviews.</div>';
+    }
+
+    // Connect Search
+    const searchInput = document.getElementById('managerCodeSearch');
+    if (searchInput) {
+        searchInput.oninput = (e) => {
+            const query = e.target.value.toLowerCase();
+            const filtered = currentProjectCodes.filter(c => c.name.toLowerCase().includes(query));
+            renderManagerSidebar(filtered, initialCodeId);
+        };
+        searchInput.value = '';
+    }
+};
+
+function renderManagerSidebar(codes, activeCodeId) {
+    const list = document.getElementById('managerCodesList');
+    if (!list) return;
+
+    list.innerHTML = codes.map(code => `
+        <div onclick="selectCodeInManager('${currentProjectId}', {id: '${code.id}', name: '${escapeHtml(code.name || '')}', color: '${code.color}'})" 
+             style="padding: 0.75rem 1rem; cursor: pointer; display: flex; align-items: center; gap: 0.75rem; border-bottom: 1px solid #f1f5f9; background: ${code.id === activeCodeId ? '#fff7ed' : 'transparent'}; border-left: 3px solid ${code.id === activeCodeId ? '#ea580c' : 'transparent'}; transition: all 0.2s;">
+            <div style="width: 12px; height: 12px; border-radius: 50%; background: ${code.color}; flex-shrink: 0;"></div>
+            <span style="font-size: 0.9rem; font-weight: 500; color: var(--text-body);">${escapeHtml(code.name || 'Untitled')}</span>
+        </div>
+    `).join('');
+}
+
+window.selectCodeInManager = async function (projectId, code) {
+    // Update sidebar active state
+    renderManagerSidebar(currentProjectCodes, code.id);
+
+    // Update Header
+    document.getElementById('managerSelectedCodeName').textContent = code.name;
+    document.getElementById('managerSelectedCodeMeta').innerHTML = `
+        <div style="display: flex; align-items: center; gap: 0.5rem;">
+            <div style="width: 10px; height: 10px; border-radius: 50%; background: ${code.color};"></div>
+            <span>Loading usage data...</span>
+        </div>
+    `;
+
+    const list = document.getElementById('managerUsageList');
+    list.innerHTML = '<div style="display: flex; justify-content: center; padding: 2rem;"><div class="spinner"></div></div>'; // Add spinner logic or text
+
+    try {
+        // Fetch all interviews
+        const interviews = await window.loadInterviewsForProject(projectId);
+
+        // Find usages
+        let totalUsages = 0;
+        let usagesByInterview = [];
+
+        for (const interview of interviews) {
+            const assignments = await window.loadCodeAssignments(interview.id);
+            const codeAssignments = assignments.filter(a => a.codeId === code.id);
+
+            if (codeAssignments.length > 0) {
+                totalUsages += codeAssignments.length;
+
+                // Get segment text for each assignment
+                // We need to load the interview content to get text? 
+                // Or is it stored in the assignment? 
+                // Creating assignment stores 'text'. (checked firebase-data.js)
+
+                usagesByInterview.push({
+                    interviewTitle: interview.title,
+                    interviewId: interview.id,
+                    assignments: codeAssignments
+                });
+            }
+        }
+
+        document.getElementById('managerSelectedCodeMeta').innerHTML = `
+            <div style="display: flex; align-items: center; gap: 0.5rem;">
+                <div style="width: 10px; height: 10px; border-radius: 50%; background: ${code.color};"></div>
+                <span>${totalUsages} occurrences across ${usagesByInterview.length} interviews</span>
+            </div>
+        `;
+
+        if (totalUsages === 0) {
+            list.innerHTML = '<div style="text-align: center; color: var(--text-muted); margin-top: 3rem;">This code has not been used yet.</div>';
+            return;
+        }
+
+        // Render Usages
+        list.innerHTML = usagesByInterview.map(group => `
+            <div style="margin-bottom: 2rem;">
+                <h4 style="font-size: 0.9rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase; margin-bottom: 1rem; border-bottom: 1px solid #e2e8f0; padding-bottom: 0.5rem;">
+                    ${escapeHtml(group.interviewTitle)} (${group.assignments.length})
+                </h4>
+                <div style="display: flex; flex-direction: column; gap: 1rem;">
+                    ${group.assignments.map(a => `
+                        <div style="background: white; border: 1px solid #e2e8f0; border-radius: 8px; padding: 1rem; box-shadow: 0 1px 2px rgba(0,0,0,0.05);">
+                            <div style="font-size: 0.95rem; line-height: 1.5; color: var(--text-primary); margin-bottom: 0.75rem; border-left: 3px solid ${code.color}; padding-left: 0.75rem;">
+                                "${escapeHtml(a.text || 'No text content')}"
+                            </div>
+                            <button onclick="window.jumpToSegment('${group.interviewId}', '${a.segmentId}')" 
+                                class="btn-secondary small" style="font-size: 0.8rem;">
+                                Go to context
+                            </button>
+                        </div>
+                    `).join('')}
+                </div>
+            </div>
+        `).join('');
+
+    } catch (error) {
+        console.error("Error loading usages:", error);
+        list.innerHTML = '<p style="color: red; text-align: center;">Error loading usage data.</p>';
+    }
+};
+
+// Ensure button works
+const openManagerBtn = document.getElementById('openCodeManagerBtn');
+if (openManagerBtn) {
+    openManagerBtn.onclick = () => openCodeManager(currentProjectId);
+}
+
+// Add jumpToSegment if missing (it might be duplicated if I don't check, but safe to overwrite or add)
+// It was in the previous view, so assume it exists.
