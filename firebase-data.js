@@ -635,6 +635,177 @@ async function loadAllUserGuidelines() {
 }
 
 // ============================================================================
+// QUALITATIVE CODES OPERATIONS
+// ============================================================================
+
+/**
+ * Save a code to Firestore (as subcollection under project)
+ */
+async function saveCodeToFirestore(projectId, codeData) {
+    if (!currentUser || !projectId) return null;
+
+    try {
+        const codeRef = db.collection('projects').doc(projectId).collection('codes').doc();
+        const code = {
+            id: codeRef.id,
+            projectId: projectId,
+            name: codeData.name || '',
+            color: codeData.color || '#3b82f6',
+            description: codeData.description || '',
+            userId: currentUser.uid,
+            createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+            updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+        };
+
+        await codeRef.set(code);
+        return code;
+    } catch (error) {
+        console.error('Error saving code:', error);
+        throw error;
+    }
+}
+
+/**
+ * Update an existing code
+ */
+async function updateCodeInFirestore(projectId, codeId, updates) {
+    if (!currentUser || !projectId) return;
+
+    try {
+        await db.collection('projects').doc(projectId).collection('codes').doc(codeId).update({
+            ...updates,
+            updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+        });
+    } catch (error) {
+        console.error('Error updating code:', error);
+        throw error;
+    }
+}
+
+/**
+ * Delete a code and all its assignments
+ */
+async function deleteCodeFromFirestore(projectId, codeId) {
+    if (!currentUser || !projectId) return;
+
+    try {
+        const batch = db.batch();
+
+        // Delete all code assignments for this code (these are in interviews subcollection)
+        const interviewsSnapshot = await db.collection('interviews')
+            .where('userId', '==', currentUser.uid)
+            .where('projectId', '==', projectId)
+            .get();
+
+        for (const interviewDoc of interviewsSnapshot.docs) {
+            const assignmentsSnapshot = await interviewDoc.ref.collection('codeAssignments')
+                .where('codeId', '==', codeId)
+                .get();
+            assignmentsSnapshot.docs.forEach(doc => batch.delete(doc.ref));
+        }
+
+        // Delete the code itself
+        batch.delete(db.collection('projects').doc(projectId).collection('codes').doc(codeId));
+
+        await batch.commit();
+    } catch (error) {
+        console.error('Error deleting code:', error);
+        throw error;
+    }
+}
+
+/**
+ * Load all codes for a project
+ */
+async function loadCodesForProject(projectId) {
+    if (!currentUser || !projectId) return [];
+
+    try {
+        const snapshot = await db.collection('projects').doc(projectId).collection('codes').get();
+
+        const codes = snapshot.docs.map(doc => ({
+            id: doc.id,
+            ...doc.data()
+        }));
+
+        // Sort by creation date
+        codes.sort((a, b) => {
+            const aTime = a.createdAt?.toMillis() || 0;
+            const bTime = b.createdAt?.toMillis() || 0;
+            return aTime - bTime;
+        });
+
+        return codes;
+    } catch (error) {
+        console.error('Error loading codes:', error);
+        return [];
+    }
+}
+
+/**
+ * Save a code assignment to text in transcript
+ */
+async function saveCodeAssignment(interviewId, assignmentData) {
+    if (!currentUser || !interviewId) return null;
+
+    try {
+        const docRef = await db.collection('codeAssignments').add({
+            userId: currentUser.uid,
+            interviewId: interviewId,
+            codeId: assignmentData.codeId,
+            segmentId: assignmentData.segmentId,
+            startOffset: assignmentData.startOffset,
+            endOffset: assignmentData.endOffset,
+            text: assignmentData.text,
+            createdAt: firebase.firestore.FieldValue.serverTimestamp()
+        });
+
+        return docRef.id;
+    } catch (error) {
+        console.error('Error saving code assignment:', error);
+        throw error;
+    }
+}
+
+/**
+ * Load all code assignments for an interview
+ */
+async function loadCodeAssignments(interviewId) {
+    if (!currentUser || !interviewId) return [];
+
+    try {
+        const snapshot = await db.collection('codeAssignments')
+            .where('userId', '==', currentUser.uid)
+            .where('interviewId', '==', interviewId)
+            .get();
+
+        const assignments = snapshot.docs.map(doc => ({
+            id: doc.id,
+            ...doc.data()
+        }));
+
+        return assignments;
+    } catch (error) {
+        console.error('Error loading code assignments:', error);
+        return [];
+    }
+}
+
+/**
+ * Delete a code assignment
+ */
+async function deleteCodeAssignment(assignmentId) {
+    if (!currentUser) return;
+
+    try {
+        await db.collection('codeAssignments').doc(assignmentId).delete();
+    } catch (error) {
+        console.error('Error deleting code assignment:', error);
+        throw error;
+    }
+}
+
+// ============================================================================
 // EXPORT FUNCTIONS TO GLOBAL SCOPE
 // ============================================================================
 
@@ -664,3 +835,12 @@ window.deleteInterviewFromFirestore = async function (interviewId) {
         throw error;
     }
 };
+
+// Code operations
+window.saveCodeToFirestore = saveCodeToFirestore;
+window.updateCodeInFirestore = updateCodeInFirestore;
+window.deleteCodeFromFirestore = deleteCodeFromFirestore;
+window.loadCodesForProject = loadCodesForProject;
+window.saveCodeAssignment = saveCodeAssignment;
+window.loadCodeAssignments = loadCodeAssignments;
+window.deleteCodeAssignment = deleteCodeAssignment;

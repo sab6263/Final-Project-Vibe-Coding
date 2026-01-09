@@ -277,3 +277,106 @@
     background: transparent;
     transform: none;
 }
+
+/* ============================================================================
+   CODING MODE
+   ============================================================================ */
+
+.coding-sidebar.hidden {
+    display: none !important;
+}
+
+.review-note-card.read-only {
+    background: #f1f5f9;
+    opacity: 0.7;
+    cursor: default;
+}
+
+.review-note-card.read-only:hover {
+    transform: none;
+    box-shadow: none;
+}
+
+.coded-text {
+    position: relative;
+    border-bottom: 3px solid;
+    cursor: pointer;
+    transition: all 0.2s;
+    padding-bottom: 2px;
+}
+
+.coded-text:hover {
+    opacity: 0.8;
+}
+
+.code-assignment-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    padding: 0.2rem 0.5rem;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    margin-left: 0.3rem;
+    vertical-align: middle;
+    border: 1.5px solid;
+}
+
+/* Code assignment popover for text selection */
+.code-assignment-popover {
+    position: absolute;
+    background: white;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    padding: 0.75rem;
+    z-index: 1000;
+    min-width: 220px;
+}
+
+.code-assignment-popover .popover-header {
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--text-muted);
+    margin-bottom: 0.5rem;
+    padding-bottom: 0.5rem;
+    border-bottom: 1px solid #e2e8f0;
+}
+
+.code-options-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+    max-height: 300px;
+    overflow-y: auto;
+}
+
+.code-option-item {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.6rem 0.75rem;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.15s;
+    border: 1px solid #e2e8f0;
+}
+
+.code-option-item:hover {
+    background: #f8fafc;
+    border-color: #cbd5e1;
+}
+
+.code-option-color {
+    width: 20px;
+    height: 20px;
+    border-radius: 4px;
+    flex-shrink: 0;
+    border: 2px solid rgba(0, 0, 0, 0.1);
+}
+
+.code-option-name {
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: var(--text-title);
+}

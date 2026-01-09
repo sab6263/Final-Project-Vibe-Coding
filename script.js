@@ -277,6 +277,55 @@ if (confirmDeleteBtn) confirmDeleteBtn.addEventListener('click', confirmDeleteAc
 if (cancelDeleteBtn) cancelDeleteBtn.addEventListener('click', closeDeleteModal);
 if (closeDeleteModalIcon) closeDeleteModalIcon.addEventListener('click', closeDeleteModal);
 
+// Code Modal Listeners
+const createCodeBtn = document.getElementById('createCodeBtn');
+const closeCodeModalBtn = document.getElementById('closeCodeModal');
+const saveCodeBtn = document.getElementById('saveCodeBtn');
+const cancelCodeBtn = document.getElementById('cancelCodeBtn');
+const codeModal = document.getElementById('codeModal');
+
+if (createCodeBtn) {
+    createCodeBtn.addEventListener('click', () => {
+        if (currentProjectId) {
+            openCodeModal(currentProjectId);
+        }
+    });
+}
+
+if (closeCodeModalBtn) closeCodeModalBtn.addEventListener('click', closeCodeModal);
+if (saveCodeBtn) saveCodeBtn.addEventListener('click', saveCode);
+if (cancelCodeBtn) cancelCodeBtn.addEventListener('click', closeCodeModal);
+
+if (codeModal) {
+    codeModal.addEventListener('click', (e) => {
+        if (e.target === codeModal) closeCodeModal();
+    });
+}
+
+// Color picker event listeners
+document.addEventListener('click', (e) => {
+    if (e.target.closest('.color-option')) {
+        const option = e.target.closest('.color-option');
+        if (option.dataset.color) {
+            updateColorSelection(option.dataset.color);
+        }
+    }
+});
+
+// Custom color picker
+const customColorInput = document.getElementById('customColorInput');
+const customColorBubble = document.getElementById('customColorBubble');
+if (customColorInput) {
+    customColorInput.addEventListener('input', (e) => {
+        const color = e.target.value;
+        updateColorSelection(color);
+        // Update the bubble background
+        if (customColorBubble) {
+            customColorBubble.style.background = color;
+        }
+    });
+}
+
 // DOM Elements - Interview
 const createInterviewBtn = document.getElementById('createInterviewBtn');
 const interviewDetailView = document.getElementById('interviewDetailView');
@@ -504,11 +553,225 @@ async function openProject(id) {
     // Load and render interviews
     renderInterviewsList(id);
 
+    // Load and render codes
+    renderCodesList(id);
+
     // Switch View
     projectsOverview.classList.add('hidden');
     projectDetailView.classList.remove('hidden');
     window.scrollTo(0, 0);
 }
+
+// ============================================================================
+// CODES MANAGEMENT
+// ============================================================================
+
+let currentCodeData = null; // { projectId, codeId? }
+let selectedColor = '#3b82f6'; // Default blue
+
+/**
+ * Render codes list for a project
+ */
+async function renderCodesList(projectId) {
+    const list = document.getElementById('codesList');
+    if (!list) return;
+
+    try {
+        const codes = await window.loadCodesForProject(projectId);
+
+        if (!codes || codes.length === 0) {
+            list.className = 'list-container empty-list-placeholder';
+            list.innerHTML = '<p>No codes yet.</p>';
+            return;
+        }
+
+        list.className = 'list-container';
+        list.innerHTML = codes.map(code => `
+            <div class="code-item" data-code-id="${code.id}">
+                <div class="code-item-left">
+                    <div class="code-color-preview" style="background: ${code.color};"></div>
+                    <div class="code-item-info">
+                        <div class="code-item-name">${escapeHtml(code.name)}</div>
+                    </div>
+                </div>
+                <div class="code-item-actions">
+                    <button onclick="window.editCode('${projectId}', '${code.id}')" title="Edit code">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                            <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+                        </svg>
+                    </button>
+                    <button class="delete-code-btn" onclick="window.deleteCodeWithConfirm('${code.id}')" title="Delete code">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <polyline points="3 6 5 6 21 6"></polyline>
+                            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                        </svg>
+                    </button>
+                </div>
+            </div>
+        `).join('');
+
+    } catch (error) {
+        console.error('Error rendering codes:', error);
+        list.innerHTML = '<p style="color: var(--text-muted); text-align: center;">Error loading codes</p>';
+    }
+}
+
+/**
+ * Open code creation/edit modal
+ */
+function openCodeModal(projectId, codeId = null) {
+    console.log('Opening code modal with projectId:', projectId, 'codeId:', codeId);
+
+    if (!projectId) {
+        console.error('No projectId provided to openCodeModal');
+        alert('Error: No project selected');
+        return;
+    }
+
+    currentCodeData = { projectId, codeId };
+    const modal = document.getElementById('codeModal');
+    const modalTitle = document.getElementById('codeModalTitle');
+    const nameInput = document.getElementById('codeName');
+
+    modal.classList.remove('hidden');
+
+    if (codeId) {
+        // Edit mode - load code data
+        modalTitle.textContent = 'Edit Code';
+        window.loadCodesForProject(projectId).then(codes => {
+            const code = codes.find(c => c.id === codeId);
+            if (code) {
+                nameInput.value = code.name;
+                selectedColor = code.color;
+                updateColorSelection(code.color);
+            }
+        });
+    } else {
+        // Create mode
+        modalTitle.textContent = 'Create Code';
+        nameInput.value = '';
+        selectedColor = '#3b82f6';
+        updateColorSelection('#3b82f6');
+    }
+
+    setTimeout(() => nameInput.focus(), 50);
+}
+
+/**
+ * Update color selection visual state
+ */
+function updateColorSelection(color) {
+    document.querySelectorAll('.color-option').forEach(opt => {
+        opt.classList.remove('selected');
+        if (opt.dataset.color === color) {
+            opt.classList.add('selected');
+        }
+    });
+    selectedColor = color;
+}
+
+/**
+ * Close code modal
+ */
+function closeCodeModal() {
+    document.getElementById('codeModal').classList.add('hidden');
+    currentCodeData = null;
+}
+
+/**
+ * Save code (create or update)
+ */
+async function saveCode() {
+    if (!currentCodeData) {
+        console.error('No code data available');
+        alert('Error: No project selected. Please try again.');
+        return;
+    }
+
+    const name = document.getElementById('codeName').value.trim();
+
+    if (!name) {
+        alert('Please enter a code name');
+        return;
+    }
+
+    if (!selectedColor) {
+        alert('Please select a color');
+        return;
+    }
+
+    const codeData = {
+        name,
+        color: selectedColor
+    };
+
+    try {
+        if (currentCodeData.codeId) {
+            // Update existing code
+            await window.updateCodeInFirestore(currentCodeData.projectId, currentCodeData.codeId, codeData);
+            showToast('Code updated');
+        } else {
+            // Create new code
+            await window.saveCodeToFirestore(currentCodeData.projectId, codeData);
+            showToast('Code created');
+        }
+
+        const projectId = currentCodeData.projectId;
+        closeCodeModal();
+        renderCodesList(projectId);
+    } catch (error) {
+        console.error('Error saving code:', error);
+        alert('Failed to save code. Please try again.');
+    }
+}
+
+/**
+ * Edit existing code
+ */
+function editCode(projectId, codeId) {
+    openCodeModal(projectId, codeId);
+}
+
+/**
+ * Delete code with confirmation
+ */
+function deleteCodeWithConfirm(codeId) {
+    itemToDelete = { type: 'code', id: codeId, projectId: currentProjectId };
+
+    const titleEl = document.getElementById('deleteModalTitle');
+    const textEl = document.getElementById('deleteModalText');
+    if (titleEl) titleEl.textContent = "Delete Code";
+    if (textEl) textEl.textContent = "Are you sure you want to delete this code? All code assignments will also be deleted.";
+
+    deleteModal.classList.remove('hidden');
+}
+
+// Update confirmDeleteAction to handle codes
+const originalConfirmDeleteAction = confirmDeleteAction;
+confirmDeleteAction = async function () {
+    if (itemToDelete && itemToDelete.type === 'code') {
+        try {
+            await window.deleteCodeFromFirestore(itemToDelete.projectId, itemToDelete.id);
+            showToast('Code deleted');
+            if (itemToDelete.projectId) {
+                renderCodesList(itemToDelete.projectId);
+            }
+        } catch (error) {
+            console.error('Error deleting code:', error);
+            alert('Failed to delete code');
+        }
+        closeDeleteModal();
+    } else {
+        // Call original function for other types
+        await originalConfirmDeleteAction();
+    }
+};
+
+// Expose functions globally
+window.openCodeModal = openCodeModal;
+window.editCode = editCode;
+window.deleteCodeWithConfirm = deleteCodeWithConfirm;
 
 /**
  * Closes Project Detail View and returns to Overview
@@ -3236,11 +3499,390 @@ function openReview(interviewId) {
     reviewHistoryStack = [];
     reviewRedoStack = [];
 
+    // Reset mode states - Set Edit mode as default
+    reviewEditMode = true;
+    reviewNotesMode = false;
+    reviewCodingMode = false;
+
+    // Load codes for this interview's project
+    loadCodesForReview();
+
     // Merge and Render first so we have accurate data
     renderReview();
 
     // Initial state push (State 0)
     pushToReviewHistory();
+
+    // Setup mode toggle listeners
+    setupReviewModeListeners();
+
+    // Apply initial toolbar visual state
+    updateToolbarModes();
+}
+
+// Coding mode state
+let reviewCodingMode = false;
+let currentReviewCodes = [];
+let currentCodeAssignments = [];
+let codeSelectionPopover = null;
+
+/**
+ * Load codes for the current project in review mode
+ */
+async function loadCodesForReview() {
+    if (!currentProjectId) return;
+
+    try {
+        currentReviewCodes = await window.loadCodesForProject(currentProjectId);
+        if (currentInterviewId) {
+            currentCodeAssignments = await window.loadCodeAssignments(currentInterviewId);
+        }
+        renderReviewCodesSidebar();
+    } catch (error) {
+        console.error('Error loading codes for review:', error);
+    }
+}
+
+/**
+ * Render codes in the review sidebar
+ */
+function renderReviewCodesSidebar() {
+    const codesList = document.getElementById('reviewCodesList');
+    if (!codesList) return;
+
+    if (!currentReviewCodes || currentReviewCodes.length === 0) {
+        codesList.innerHTML = '<p style="text-align: center; color: var(--text-muted); font-size: 0.8rem; padding: 2rem 1rem;">No codes yet</p>';
+        return;
+    }
+
+    codesList.innerHTML = currentReviewCodes.map(code => `
+        <div class="review-code-badge" 
+             draggable="true"
+             style="display: flex; align-items: center; gap: 0.65rem; padding: 0.65rem 0.85rem; background: white; border: 1px solid #e2e8f0; border-radius: 8px; cursor: grab; transition: all 0.2s; border-left: 3px solid ${code.color};" 
+             data-code-id="${code.id}"
+             data-code-name="${escapeHtml(code.name)}"
+             data-code-color="${code.color}">
+            <div style="width: 10px; height: 10px; border-radius: 50%; background: ${code.color}; flex-shrink: 0;"></div>
+            <span style="font-size: 0.85rem; font-weight: 600; color: var(--text-title); flex: 1;">${escapeHtml(code.name)}</span>
+        </div>
+    `).join('');
+
+    // Add hover and drag effect via event listeners
+    document.querySelectorAll('.review-code-badge').forEach(badge => {
+        // Hover effects
+        badge.addEventListener('mouseenter', function () {
+            this.style.background = '#f8fafc';
+            this.style.transform = 'translateX(2px)';
+            this.style.boxShadow = '0 2px 4px rgba(0,0,0,0.05)';
+        });
+        badge.addEventListener('mouseleave', function () {
+            if (!this.classList.contains('dragging')) {
+                this.style.background = 'white';
+                this.style.transform = 'translateX(0)';
+                this.style.boxShadow = 'none';
+            }
+        });
+
+        // Drag events
+        badge.addEventListener('dragstart', function (e) {
+            this.classList.add('dragging');
+            this.style.opacity = '0.5';
+            this.style.cursor = 'grabbing';
+            e.dataTransfer.effectAllowed = 'copy';
+            e.dataTransfer.setData('application/json', JSON.stringify({
+                codeId: this.dataset.codeId,
+                codeName: this.dataset.codeName,
+                codeColor: this.dataset.codeColor
+            }));
+        });
+
+        badge.addEventListener('dragend', function (e) {
+            this.classList.remove('dragging');
+            this.style.opacity = '1';
+            this.style.cursor = 'grab';
+            this.style.background = 'white';
+            this.style.transform = 'translateX(0)';
+            this.style.boxShadow = 'none';
+        });
+    });
+}
+
+/**
+ * Setup review mode toggle listeners
+ */
+function setupReviewModeListeners() {
+    const revModeEdit = document.getElementById('revModeEdit');
+    const revModeNotes = document.getElementById('revModeNotes');
+    const revModeCoding = document.getElementById('revModeCoding');
+    const newCodeFromReview = document.getElementById('newCodeFromReview');
+
+    if (revModeEdit) {
+        revModeEdit.onclick = () => {
+            reviewEditMode = true;
+            reviewNotesMode = false;
+            reviewCodingMode = false;
+            updateToolbarModes();
+        };
+    }
+
+    if (revModeNotes) {
+        revModeNotes.onclick = () => {
+            reviewEditMode = false;
+            reviewNotesMode = true;
+            reviewCodingMode = false;
+            updateToolbarModes();
+        };
+    }
+
+    if (revModeCoding) {
+        revModeCoding.onclick = () => {
+            reviewEditMode = false;
+            reviewNotesMode = false;
+            reviewCodingMode = true;
+            updateToolbarModes();
+            enableTextSelection();
+            showToast('Select text, then drag a code from the sidebar to assign it', 'info');
+        };
+    }
+
+    if (newCodeFromReview) {
+        newCodeFromReview.onclick = () => {
+            if (currentProjectId) {
+                openCodeModal(currentProjectId);
+                // Reload codes after creating
+                setTimeout(() => loadCodesForReview(), 500);
+            }
+        };
+    }
+}
+
+/**
+ * Enable text selection and drag & drop for coding
+ */
+function enableTextSelection() {
+    const reviewFeed = document.getElementById('reviewFeed');
+    if (!reviewFeed) return;
+
+    // Remove old event listeners
+    reviewFeed.removeEventListener('mouseup', handleTextSelectionForCoding);
+    reviewFeed.removeEventListener('dragover', handleDragOver);
+    reviewFeed.removeEventListener('drop', handleCodeDrop);
+
+    if (reviewCodingMode) {
+        // Add selection and drag & drop handlers
+        reviewFeed.addEventListener('mouseup', handleTextSelectionForCoding);
+        reviewFeed.addEventListener('dragover', handleDragOver);
+        reviewFeed.addEventListener('drop', handleCodeDrop);
+    }
+}
+
+// Store current selection info for coding
+let codeSelection = null;
+
+/**
+ * Handle text selection - create persistent grey highlight
+ */
+function handleTextSelectionForCoding(event) {
+    const selection = window.getSelection();
+    const selectedText = selection.toString().trim();
+
+    if (selectedText.length === 0) {
+        return;
+    }
+
+    try {
+        const range = selection.getRangeAt(0);
+
+        // Find the segment containing the selection
+        let segmentElement = selection.anchorNode;
+        while (segmentElement && !segmentElement.classList?.contains('review-segment')) {
+            segmentElement = segmentElement.parentElement;
+        }
+
+        if (!segmentElement) return;
+
+        const segmentId = segmentElement.dataset.segmentId;
+
+        // Create a persistent grey highlight
+        const span = document.createElement('span');
+        span.className = 'code-pending-highlight';
+        span.style.backgroundColor = 'transparent';
+        span.style.borderBottom = '3px solid #9ca3af';
+        span.style.paddingBottom = '2px';
+        span.style.cursor = 'pointer';
+        span.setAttribute('data-segment-id', segmentId);
+        span.setAttribute('data-highlight-text', selectedText);
+
+        try {
+            range.surroundContents(span);
+
+            // Clear browser selection
+            window.getSelection().removeAllRanges();
+
+            showToast('Text highlighted - drag a code to assign it', 'info');
+        } catch (e) {
+            console.warn('Could not highlight selection:', e);
+            showToast('Could not highlight text - try selecting within a single segment', 'error');
+        }
+
+    } catch (error) {
+        console.error('Error handling selection:', error);
+    }
+}
+
+/**
+ * Add grey highlight to current selection
+ */
+function addSelectionHighlight(range) {
+    const span = document.createElement('span');
+    span.className = 'code-selection-highlight';
+    span.style.backgroundColor = 'transparent';
+    span.style.borderBottom = '3px solid #9ca3af';
+    span.style.paddingBottom = '2px';
+    span.style.transition = 'all 0.2s';
+
+    try {
+        range.surroundContents(span);
+    } catch (e) {
+        // If surroundContents fails (e.g., selection spans multiple elements),
+        // just mark the selection differently
+        console.warn('Could not highlight selection:', e);
+    }
+}
+
+/**
+ * Clear selection highlight
+ */
+function clearSelectionHighlight() {
+    const highlights = document.querySelectorAll('.code-selection-highlight');
+    highlights.forEach(highlight => {
+        const parent = highlight.parentNode;
+        while (highlight.firstChild) {
+            parent.insertBefore(highlight.firstChild, highlight);
+        }
+        parent.removeChild(highlight);
+        parent.normalize();
+    });
+}
+
+/**
+ * Handle drag over to allow drop
+ */
+function handleDragOver(event) {
+    event.preventDefault();
+    event.dataTransfer.dropEffect = 'copy';
+
+    // Check if we're hovering over a pending highlight OR already coded text
+    const targetHighlight = event.target.closest('.code-pending-highlight, .coded-text');
+
+    if (targetHighlight) {
+        try {
+            const data = JSON.parse(event.dataTransfer.getData('application/json'));
+            if (data && data.codeColor) {
+                targetHighlight.style.borderBottom = `3px solid ${data.codeColor}`;
+            }
+        } catch (e) {
+            // Fallback
+        }
+    }
+}
+
+/**
+ * Handle dropping a code onto a grey highlighted text (or replacing existing code)
+ */
+async function handleCodeDrop(event) {
+    event.preventDefault();
+
+    // Find if we dropped on a pending highlight or coded text
+    const targetHighlight = event.target.closest('.code-pending-highlight, .coded-text');
+
+    if (!targetHighlight) {
+        showToast('Please drop on a grey-highlighted text or an existing coded text', 'info');
+        return;
+    }
+
+    try {
+        // Get the dropped code data
+        const data = JSON.parse(event.dataTransfer.getData('application/json'));
+
+        const text = targetHighlight.getAttribute('data-highlight-text');
+        const segmentId = targetHighlight.getAttribute('data-segment-id');
+
+        console.log('Dropped code data:', data);
+        console.log('Highlight text:', text, 'Segment:', segmentId);
+
+        // Check if this highlight already has a code (replacing)
+        const isReplacing = targetHighlight.classList.contains('coded-text');
+
+        if (isReplacing) {
+            // Remove old code tag if exists
+            const oldTag = targetHighlight.querySelector('.code-tag');
+            if (oldTag) oldTag.remove();
+        }
+
+        // Assign the code
+        await assignCodeToText(data.codeId, text, segmentId);
+
+        // Transform into coded highlight (no background, just underline + tag)
+        targetHighlight.className = 'coded-text';
+        targetHighlight.style.backgroundColor = 'transparent';
+        targetHighlight.style.borderBottom = `3px solid ${data.codeColor}`;
+        targetHighlight.style.cursor = 'pointer';
+        targetHighlight.style.position = 'relative';
+        targetHighlight.style.display = 'inline';
+        targetHighlight.setAttribute('data-code-name', data.codeName);
+        targetHighlight.setAttribute('data-code-color', data.codeColor);
+        targetHighlight.setAttribute('data-code-id', data.codeId);
+
+        // Add visible code tag
+        const codeTag = document.createElement('span');
+        codeTag.className = 'code-tag';
+        codeTag.textContent = data.codeName;
+        codeTag.style.cssText = `
+            display: inline-block;
+            margin-left: 4px;
+            padding: 2px 6px;
+            font-size: 0.7rem;
+            font-weight: 600;
+            color: ${data.codeColor};
+            background: ${data.codeColor}20;
+            border: 1px solid ${data.codeColor}40;
+            border-radius: 4px;
+            vertical-align: middle;
+        `;
+        targetHighlight.appendChild(codeTag);
+
+    } catch (error) {
+        console.error('Error handling code drop:', error);
+        showToast('Failed to assign code', 'error');
+    }
+}
+
+/**
+ * Assign code to selected text
+ */
+async function assignCodeToText(codeId, text, segmentId) {
+    if (!currentInterviewId) return;
+
+    console.log('Assigning code:', { codeId, text, segmentId });
+
+    const assignmentData = {
+        codeId: codeId,
+        segmentId: segmentId,
+        startOffset: 0,
+        endOffset: text.length,
+        text: text
+    };
+
+    try {
+        await window.saveCodeAssignment(currentInterviewId, assignmentData);
+        currentCodeAssignments = await window.loadCodeAssignments(currentInterviewId);
+        showToast('Code assigned');
+        window.getSelection().removeAllRanges();
+    } catch (error) {
+        console.error('Error assigning code:', error);
+        showToast('Failed to assign code', 'error');
+    }
 }
 
 function renderReview() {
@@ -3614,44 +4256,87 @@ async function downloadTranscriptAsPDF() {
 
 // Helper to toggle button active style within the grouped toggle
 function updateToolbarModes() {
+    const revModeEdit = document.getElementById('revModeEdit');
+    const revModeNotes = document.getElementById('revModeNotes');
+    const revModeCoding = document.getElementById('revModeCoding');
+
     // Edit mode visual
-    if (reviewEditMode) {
-        revModeEdit.style.background = '#ffffff';
-        revModeEdit.style.boxShadow = '0 1px 3px rgba(0,0,0,0.1)';
-        revModeEdit.style.color = 'var(--brand-primary)';
-    } else {
-        revModeEdit.style.background = 'transparent';
-        revModeEdit.style.boxShadow = 'none';
-        revModeEdit.style.color = 'var(--text-muted)';
+    if (revModeEdit) {
+        if (reviewEditMode) {
+            revModeEdit.style.background = '#ffffff';
+            revModeEdit.style.boxShadow = '0 1px 3px rgba(0,0,0,0.1)';
+            revModeEdit.style.color = 'var(--brand-primary)';
+        } else {
+            revModeEdit.style.background = 'transparent';
+            revModeEdit.style.boxShadow = 'none';
+            revModeEdit.style.color = 'var(--text-muted)';
+        }
     }
 
     // Notes mode visual
-    if (reviewNotesMode) {
-        revModeNotes.style.background = '#ffffff';
-        revModeNotes.style.boxShadow = '0 1px 3px rgba(0,0,0,0.1)';
-        revModeNotes.style.color = 'var(--brand-primary)';
-    } else {
-        revModeNotes.style.background = 'transparent';
-        revModeNotes.style.boxShadow = 'none';
-        revModeNotes.style.color = 'var(--text-muted)';
+    if (revModeNotes) {
+        if (reviewNotesMode) {
+            revModeNotes.style.background = '#ffffff';
+            revModeNotes.style.boxShadow = '0 1px 3px rgba(0,0,0,0.1)';
+            revModeNotes.style.color = 'var(--brand-primary)';
+        } else {
+            revModeNotes.style.background = 'transparent';
+            revModeNotes.style.boxShadow = 'none';
+            revModeNotes.style.color = 'var(--text-muted)';
+        }
+    }
+
+    // Coding mode visual
+    if (revModeCoding) {
+        if (reviewCodingMode) {
+            revModeCoding.style.background = '#ffffff';
+            revModeCoding.style.boxShadow = '0 1px 3px rgba(0,0,0,0.1)';
+            revModeCoding.style.color = 'var(--brand-primary)';
+        } else {
+            revModeCoding.style.background = 'transparent';
+            revModeCoding.style.boxShadow = 'none';
+            revModeCoding.style.color = 'var(--text-muted)';
+        }
     }
 
     // Show/Hide sub-actions
+    const speakerLabelsContainer = document.getElementById('speakerLabelsContainer');
     if (speakerLabelsContainer) speakerLabelsContainer.style.display = reviewEditMode ? 'flex' : 'none';
 
     // Show/Hide Bottom Toolbar Row (Formatting) - Only visible in Edit Mode
     const bottomRow = document.querySelector('.toolbar-bottom-row');
     if (bottomRow) {
         bottomRow.style.display = reviewEditMode ? 'flex' : 'none';
-        // Add borders/padding/margin logic if needed to keep it clean.
-        // It has a top border in CSS/HTML style attribute, so hiding it removes that line. Perfect.
     }
 
     // Toggle the new staging area bar for notes
     const stagingArea = document.getElementById('notesStagingArea');
     if (stagingArea) stagingArea.style.display = reviewNotesMode ? 'flex' : 'none';
 
+    // Show/Hide codes sidebar in coding mode
+    const codingSidebar = document.getElementById('reviewCodingSidebar');
+    if (codingSidebar) {
+        if (reviewCodingMode) {
+            codingSidebar.classList.remove('hidden');
+        } else {
+            codingSidebar.classList.add('hidden');
+        }
+    }
+
+    // Make notes read-only in coding mode
+    const noteCards = document.querySelectorAll('.review-note-card');
+    noteCards.forEach(card => {
+        if (reviewCodingMode) {
+            card.classList.add('read-only');
+        } else {
+            card.classList.remove('read-only');
+        }
+    });
+
     // Undo/Redo Button Visuals
+    const revUndoBtn = document.getElementById('revUndoBtn');
+    const revRedoBtn = document.getElementById('revRedoBtn');
+
     if (revUndoBtn) {
         const canUndo = reviewHistoryStack.length > 1;
         revUndoBtn.style.opacity = canUndo ? '1' : '0.5';
@@ -3788,6 +4473,11 @@ function initDragAndDrop() {
     document.addEventListener('dragover', (e) => {
         e.preventDefault(); // allow drop
         e.dataTransfer.dropEffect = 'copy';
+
+        // Don't show orange indicators in coding mode
+        if (reviewCodingMode) {
+            return;
+        }
 
         const segment = e.target.closest('.review-segment');
 
