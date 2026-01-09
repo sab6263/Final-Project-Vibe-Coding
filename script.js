@@ -88,10 +88,15 @@ let currentSegment = null;
 let lastSegmentEndTime = null;
 let currentSpeaker = 'interviewer';
 let speakerIdActive = false; // Default to false to match UI behavior
+let reviewCodingMode = false;
+let currentReviewCodes = [];
+let codeSelectionPopover = null;
 let currentSelection = null; // { text, start, end, segmentId }
 let currentTempMark = null; // Reference to the temporary visual highlight
 let generalNotes = []; // { content, timestamp }
+
 let selectedSegmentId = null; // For inline notes
+let currentCodeAssignments = []; // Loaded coded text assignments
 
 // DOM Elements - Views
 const projectsOverview = document.getElementById('projectsOverview');
@@ -3509,8 +3514,6 @@ function openReview(interviewId) {
 
     // Merge and Render first so we have accurate data
     renderReview();
-
-    // Initial state push (State 0)
     pushToReviewHistory();
 
     // Setup mode toggle listeners
@@ -3521,10 +3524,8 @@ function openReview(interviewId) {
 }
 
 // Coding mode state
-let reviewCodingMode = false;
-let currentReviewCodes = [];
-let currentCodeAssignments = [];
-let codeSelectionPopover = null;
+// reviewCodingMode, currentReviewCodes, matches are managed globally or locally
+// currentCodeAssignments is now global at top of file
 
 /**
  * Load codes for the current project in review mode
@@ -3536,6 +3537,8 @@ async function loadCodesForReview() {
         currentReviewCodes = await window.loadCodesForProject(currentProjectId);
         if (currentInterviewId) {
             currentCodeAssignments = await window.loadCodeAssignments(currentInterviewId);
+            // Re-render to show highlights on transcript
+            renderReview();
         }
         renderReviewCodesSidebar();
     } catch (error) {
@@ -3621,7 +3624,9 @@ function setupReviewModeListeners() {
             reviewEditMode = true;
             reviewNotesMode = false;
             reviewCodingMode = false;
+
             updateToolbarModes();
+            renderReview(); // Re-render to update visibility
         };
     }
 
@@ -3631,6 +3636,7 @@ function setupReviewModeListeners() {
             reviewNotesMode = true;
             reviewCodingMode = false;
             updateToolbarModes();
+            renderReview(); // Re-render to update visibility
         };
     }
 
@@ -3640,6 +3646,7 @@ function setupReviewModeListeners() {
             reviewNotesMode = false;
             reviewCodingMode = true;
             updateToolbarModes();
+            renderReview(); // Re-render to update visibility
             enableTextSelection();
             showToast('Select text, then drag a code from the sidebar to assign it', 'info');
         };
@@ -3815,42 +3822,91 @@ async function handleCodeDrop(event) {
         const isReplacing = targetHighlight.classList.contains('coded-text');
 
         if (isReplacing) {
-            // Remove old code tag if exists
-            const oldTag = targetHighlight.querySelector('.code-tag');
-            if (oldTag) oldTag.remove();
+            const oldAssignmentId = targetHighlight.getAttribute('data-assignment-id');
+            if (oldAssignmentId) {
+                console.log('Replacing assignment:', oldAssignmentId);
+                try {
+                    // Delete from DB
+                    await window.deleteCodeAssignment(oldAssignmentId);
+                    // Update local state
+                    currentCodeAssignments = currentCodeAssignments.filter(a => a.id !== oldAssignmentId);
+                    console.log('Successfully deleted old assignment from DB');
+                } catch (err) {
+                    console.error('Failed to delete old assignment:', err);
+                }
+            } else {
+                console.warn('Is replacing but no data-assignment-id found on element:', targetHighlight);
+            }
+
+            // Remove old code tag if exists (it's after the highlight, not inside)
+            const oldTag = targetHighlight.nextElementSibling;
+            if (oldTag && oldTag.classList.contains('code-tag')) {
+                oldTag.remove();
+            }
         }
 
         // Assign the code
-        await assignCodeToText(data.codeId, text, segmentId);
+        const docId = await assignCodeToText(data.codeId, text, segmentId);
 
-        // Transform into coded highlight (no background, just underline + tag)
+        if (!docId) return; // Failed to save
+
+        // Transform into coded highlight (background color, no underline)
         targetHighlight.className = 'coded-text';
-        targetHighlight.style.backgroundColor = 'transparent';
-        targetHighlight.style.borderBottom = `3px solid ${data.codeColor}`;
+        targetHighlight.style.backgroundColor = data.codeColor + '30';
+        targetHighlight.style.borderBottom = 'none';
+        targetHighlight.style.padding = '2px 4px';
+        targetHighlight.style.borderRadius = '3px';
         targetHighlight.style.cursor = 'pointer';
-        targetHighlight.style.position = 'relative';
         targetHighlight.style.display = 'inline';
         targetHighlight.setAttribute('data-code-name', data.codeName);
         targetHighlight.setAttribute('data-code-color', data.codeColor);
         targetHighlight.setAttribute('data-code-id', data.codeId);
+        targetHighlight.setAttribute('data-assignment-id', docId);
 
-        // Add visible code tag
+        // Add visible code tag AFTER the highlighted text
         const codeTag = document.createElement('span');
         codeTag.className = 'code-tag';
-        codeTag.textContent = data.codeName;
         codeTag.style.cssText = `
             display: inline-block;
-            margin-left: 4px;
-            padding: 2px 6px;
+            margin-left: 6px;
+            margin-right: 6px;
+            padding: 2px 8px;
             font-size: 0.7rem;
             font-weight: 600;
-            color: ${data.codeColor};
-            background: ${data.codeColor}20;
-            border: 1px solid ${data.codeColor}40;
+            color: white;
+            background: ${data.codeColor};
             border-radius: 4px;
-            vertical-align: middle;
+            vertical-align: baseline;
+            white-space: nowrap;
         `;
-        targetHighlight.appendChild(codeTag);
+
+        // Tag name
+        const tagName = document.createElement('span');
+        tagName.textContent = data.codeName;
+        codeTag.appendChild(tagName);
+
+        // Delete button
+        const deleteBtn = document.createElement('span');
+        deleteBtn.innerHTML = '&times;';
+        deleteBtn.title = 'Remove code';
+        deleteBtn.style.cssText = `
+            margin-left: 6px;
+            cursor: pointer;
+            opacity: 0.7;
+            font-weight: 700;
+        `;
+        deleteBtn.onclick = (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            removeCodeAssignment(docId, targetHighlight);
+        };
+        deleteBtn.onmouseenter = () => deleteBtn.style.opacity = '1';
+        deleteBtn.onmouseleave = () => deleteBtn.style.opacity = '0.7';
+
+        codeTag.appendChild(deleteBtn);
+
+        // Insert the tag after the highlighted text (not inside)
+        targetHighlight.insertAdjacentElement('afterend', codeTag);
 
     } catch (error) {
         console.error('Error handling code drop:', error);
@@ -3875,13 +3931,65 @@ async function assignCodeToText(codeId, text, segmentId) {
     };
 
     try {
-        await window.saveCodeAssignment(currentInterviewId, assignmentData);
+        const docId = await window.saveCodeAssignment(currentInterviewId, assignmentData);
         currentCodeAssignments = await window.loadCodeAssignments(currentInterviewId);
         showToast('Code assigned');
         window.getSelection().removeAllRanges();
+        return docId;
     } catch (error) {
         console.error('Error assigning code:', error);
         showToast('Failed to assign code', 'error');
+        return null; // Return null on error
+    }
+}
+
+/**
+ * Delete a code assignment
+ */
+async function removeCodeAssignment(assignmentId, elementToRemove) {
+    // Instant removal without confirmation as requested
+
+
+    try {
+        await window.deleteCodeAssignment(assignmentId);
+        showToast('Code removed');
+
+        // Update local state
+        currentCodeAssignments = currentCodeAssignments.filter(a => a.id !== assignmentId);
+
+        // Remove from DOM
+        if (elementToRemove) {
+            // Find the coded text element (previous sibling of the tag, or the parent if we change structure)
+            // In our structure: highlight element, then code tag element
+            // check structure: elementToRemove is the code tag? or the highlight?
+            // If we pass the highlight element, we can revert it.
+
+            // Revert visual style
+            // Actually, we should just re-render or let the DOM update handle it.
+            // But for instant feedback:
+            if (elementToRemove.classList.contains('code-tag')) {
+                // It's the tag. The highlight is the previous sibling.
+                const highlight = elementToRemove.previousElementSibling;
+                if (highlight && highlight.classList.contains('coded-text')) {
+                    // Unwrap the highlight content
+                    const text = highlight.firstChild; // Assuming simple text
+                    highlight.parentNode.insertBefore(text, highlight);
+                    highlight.remove();
+                }
+                elementToRemove.remove();
+            } else if (elementToRemove.classList.contains('coded-text')) {
+                // It's the highlight. The tag is next sibling.
+                const tag = elementToRemove.nextElementSibling;
+                if (tag && tag.classList.contains('code-tag')) tag.remove();
+
+                const text = elementToRemove.firstChild;
+                elementToRemove.parentNode.insertBefore(text, elementToRemove);
+                elementToRemove.remove();
+            }
+        }
+    } catch (error) {
+        console.error('Error removing code:', error);
+        showToast('Failed to remove code', 'error');
     }
 }
 
@@ -3905,6 +4013,141 @@ function renderReview() {
 
     // Scroll to top
     reviewFeed.scrollTop = 0;
+
+    // Apply visual code assignments
+    if (window.applyCodeAssignments) {
+        window.applyCodeAssignments();
+    }
+}
+
+/**
+ * Apply loaded code assignments to the DOM
+ */
+window.applyCodeAssignments = function () {
+    if (!reviewCodingMode) return; // Only show codes in Coding Mode
+    if (!currentCodeAssignments || currentCodeAssignments.length === 0) return;
+
+    currentCodeAssignments.forEach(assignment => {
+        const segmentEl = document.getElementById(assignment.segmentId);
+        if (!segmentEl) return;
+
+        // Find the text span
+        const textSpan = segmentEl.querySelector('span:last-child');
+        if (!textSpan) return;
+
+        // Search for the text
+        // This is a simplified approach searching for the text content
+        // Ideal approach uses precise offsets saved in DB
+        const textContent = textSpan.textContent;
+        const searchStr = assignment.text;
+        const index = textContent.indexOf(searchStr);
+
+        if (index !== -1) {
+            // We found match. Check if already wrapped?
+            // Since we rebuild renderReview every time, we assume clean slate (mostly)
+            // But we need to be careful not to double-wrap if multiple codes match same text.
+            // Converting simple search to DOM range wrapping is complex if checking for existing wraps.
+
+            // Strategy: Use a TreeWalker to find distinct text node matches
+            // For now, let's try to find the text node containing this string
+            findAndHighlightText(textSpan, searchStr, assignment);
+        }
+    });
+};
+
+function findAndHighlightText(rootNode, text, assignment) {
+    const walker = document.createTreeWalker(rootNode, NodeFilter.SHOW_TEXT, null, false);
+    let node;
+    while (node = walker.nextNode()) {
+        const index = node.textContent.indexOf(text);
+        if (index !== -1) {
+            // Found it!
+            // Split node if necessary
+            const range = document.createRange();
+            range.setStart(node, index);
+            range.setEnd(node, index + text.length);
+
+            // Check if already inside a coded highlight?
+            if (node.parentElement.classList.contains('coded-text')) return;
+
+            // Apply visual style (Same as handleCodeDrop)
+            const highlight = document.createElement('span');
+            highlight.className = 'coded-text';
+            // Get color from codeId? assignment only has codeId.
+            // We need to look up code details
+            const code = currentReviewCodes.find(c => c.id === assignment.codeId);
+            const color = code ? code.color : '#3b82f6';
+            const codeName = code ? code.name : 'Code';
+
+            highlight.style.backgroundColor = color + '30';
+            highlight.style.borderBottom = 'none';
+            highlight.style.padding = '2px 4px';
+            highlight.style.borderRadius = '3px';
+            highlight.style.cursor = 'pointer';
+            highlight.style.display = 'inline';
+            highlight.setAttribute('data-code-name', codeName);
+            highlight.setAttribute('data-code-color', color);
+            highlight.setAttribute('data-code-id', assignment.codeId);
+            highlight.setAttribute('data-assignment-id', assignment.id);
+            // Critical: Add these so replacement works later
+            highlight.setAttribute('data-highlight-text', assignment.text);
+            highlight.setAttribute('data-segment-id', assignment.segmentId);
+
+            try {
+                range.surroundContents(highlight);
+
+                // Add visible code tag AFTER
+                const codeTag = document.createElement('span');
+                codeTag.className = 'code-tag';
+                codeTag.style.cssText = `
+                    display: inline-block;
+                    margin-left: 6px;
+                    margin-right: 6px;
+                    padding: 2px 8px;
+                    font-size: 0.7rem;
+                    font-weight: 600;
+                    color: white;
+                    background: ${color};
+                    border-radius: 4px;
+                    vertical-align: baseline;
+                    white-space: nowrap;
+                `;
+
+                const tagName = document.createElement('span');
+                tagName.textContent = codeName;
+                codeTag.appendChild(tagName);
+
+                // Delete button
+                const deleteBtn = document.createElement('span');
+                deleteBtn.innerHTML = '&times;';
+                deleteBtn.title = 'Remove code';
+                deleteBtn.style.cssText = `
+                    margin-left: 6px;
+                    cursor: pointer;
+                    opacity: 0.7;
+                    font-weight: 700;
+                `;
+                deleteBtn.onclick = (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    removeCodeAssignment(assignment.id, highlight);
+                };
+                deleteBtn.onmouseenter = () => deleteBtn.style.opacity = '1';
+                deleteBtn.onmouseleave = () => deleteBtn.style.opacity = '0.7';
+
+                codeTag.appendChild(deleteBtn);
+
+                highlight.insertAdjacentElement('afterend', codeTag);
+
+                // Stop after first match for this assignment to avoid duplicates
+                // (Limitation: duplicate text content might be highlighted wrong)
+                return true;
+
+            } catch (e) {
+                console.warn('Highlight intersection error', e);
+            }
+        }
+    }
 }
 
 // Firebase Save Logic
@@ -4687,18 +4930,17 @@ function createReviewSegmentElement(segment) {
     div.id = segment.id; // Important for DOM lookups
     div.setAttribute('data-segment-id', segment.id);
 
-    // Use flex for horizontal alignment and vertical centering
-    div.style.display = 'flex';
-    div.style.alignItems = 'flex-start'; // Align to top for first-line consistency
-    div.style.gap = '0.75rem';
+    // Use Grid for 2-column layout (Sidebar | Content)
+    div.style.display = 'grid';
+    div.style.gridTemplateColumns = '140px 1fr'; // Increased to prevent wrap
+    div.style.gap = '1rem';
 
-    // Improved spacing for better readability
     div.style.marginBottom = '0.75rem';
     div.style.marginTop = '0.5rem';
 
     // In edit mode, add visual boundaries
     if (reviewEditMode) {
-        div.style.padding = '0.1rem 0.5rem'; // Even reduced padding
+        div.style.padding = '0.5rem';
         div.style.borderRadius = '8px';
         div.style.transition = 'background-color 0.2s';
     }
@@ -4708,21 +4950,27 @@ function createReviewSegmentElement(segment) {
         div.style.marginTop = '1.5rem'; // New Speaker Section
     }
 
+    // --- LEFT COLUMN (Sidebar) ---
+    const sidebarDiv = document.createElement('div');
+    sidebarDiv.className = 'segment-sidebar';
+    sidebarDiv.style.textAlign = 'left'; // Left align as requested
+    div.appendChild(sidebarDiv);
+
     // Speaker Label
     if (segment.speaker) {
-        const speakerLabel = document.createElement('span');
+        const speakerLabel = document.createElement('div'); // Block element
         speakerLabel.className = `speaker-label ${segment.speaker}`;
-        speakerLabel.style.display = 'inline-flex';
-        speakerLabel.style.alignItems = 'center';
-        speakerLabel.style.justifyContent = 'center';
+        speakerLabel.style.display = 'inline-block'; // Keep badge look
+        speakerLabel.style.whiteSpace = 'nowrap'; // Prevent wrapping (User request: "no umbruch")
+        speakerLabel.style.marginBottom = '0';
         speakerLabel.style.lineHeight = '1';
-        speakerLabel.style.flexShrink = '0'; // Don't squash the badge
-        speakerLabel.style.marginTop = '0.15rem'; // Visually center with the first line of text
+        speakerLabel.style.fontSize = '0.85rem';
 
         if (reviewEditMode) {
             // Add cross indicator for removal
-            speakerLabel.innerHTML = `${segment.speaker === 'interviewer' ? 'Interviewer' : 'Participant'} <span style="margin-left: 0.5rem; opacity: 0.6; font-size: 1.1em; cursor: pointer; line-height: 1;">×</span>`;
-            speakerLabel.title = "Click × to remove";
+            // Reverted to full names as requested
+            speakerLabel.innerHTML = `${segment.speaker === 'interviewer' ? 'Interviewer' : 'Participant'} <span style="margin-left: 0.3rem; opacity: 0.6; font-size: 1.1em; cursor: pointer; line-height: 1;">×</span>`;
+            speakerLabel.title = segment.speaker === 'interviewer' ? 'Interviewer' : 'Participant';
             speakerLabel.style.cursor = "default";
 
             // Only the cross is clickable
@@ -4736,10 +4984,17 @@ function createReviewSegmentElement(segment) {
             });
         } else {
             speakerLabel.textContent = segment.speaker === 'interviewer' ? 'Interviewer' : 'Participant';
+            speakerLabel.title = segment.speaker === 'interviewer' ? 'Interviewer' : 'Participant';
         }
 
-        div.appendChild(speakerLabel);
+        sidebarDiv.appendChild(speakerLabel);
     }
+
+    // --- RIGHT COLUMN (Content) ---
+    const contentDiv = document.createElement('div');
+    contentDiv.className = 'segment-content';
+    contentDiv.style.minWidth = '0'; // Crucial for text wrapping in grid
+    div.appendChild(contentDiv);
 
     const textSpan = document.createElement('span');
     textSpan.contentEditable = reviewEditMode;
@@ -4748,8 +5003,8 @@ function createReviewSegmentElement(segment) {
     textSpan.style.whiteSpace = 'pre-wrap';
     textSpan.style.wordBreak = 'break-word'; // Ensure long words break
     textSpan.style.overflowWrap = 'break-word';
-    textSpan.style.flex = '1'; // Take up remaining space
-    textSpan.style.lineHeight = '1.7';
+    textSpan.style.display = 'block'; // Block display
+    textSpan.style.lineHeight = '1.6';
 
     // Visual feedback for editable text
     if (reviewEditMode) {
@@ -5080,14 +5335,16 @@ function createReviewSegmentElement(segment) {
         }
     });
 
-    div.appendChild(textSpan);
+    contentDiv.appendChild(textSpan);
 
     textSpan.querySelectorAll('.word-highlight').forEach(mark => {
         mark.title = "";
         mark.style.cursor = "pointer";
 
-        // Allow removal on click when in edit/notes mode
+        // Allow removal on click when in edit/notes mode (but NOT in coding mode)
         mark.addEventListener('click', (e) => {
+            if (reviewCodingMode) return;
+
             if (reviewEditMode || reviewNotesMode) {
                 e.preventDefault();
                 e.stopPropagation();
@@ -5114,7 +5371,11 @@ function createReviewNoteElement(note, index) {
     if (note.isNew) div.classList.add('just-placed');
     div.draggable = true;
     div.setAttribute('data-note-id', index);
-    div.style.margin = '0.75rem 0 0.75rem 1rem';
+    // Align with text column: Sidebar (140px) + Gap (1rem approx 16px)
+    div.style.marginLeft = 'calc(140px + 1rem)';
+    div.style.marginTop = '0.75rem';
+    div.style.marginBottom = '0.75rem';
+
     div.style.lineHeight = '1.6';
     div.title = "Drag to reposition in transcript";
 
