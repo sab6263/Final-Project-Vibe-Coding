@@ -5576,3 +5576,193 @@ function escapeHtml(text) {
         .replace(/"/g, "&quot;")
         .replace(/'/g, "&#039;");
 }
+// ============================================================================
+// CODE MANAGER & ANALYSIS
+// ============================================================================
+
+const codeManagerModal = document.getElementById('codeManagerModal');
+const closeCodeManagerModal = document.getElementById('closeCodeManagerModal');
+const openCodeManagerBtn = document.getElementById('openCodeManagerBtn');
+
+if (openCodeManagerBtn) {
+    openCodeManagerBtn.addEventListener('click', () => {
+        if (currentProjectId) {
+            openCodeManager(currentProjectId);
+        }
+    });
+}
+
+if (closeCodeManagerModal) {
+    closeCodeManagerModal.addEventListener('click', () => {
+        codeManagerModal.classList.add('hidden');
+    });
+}
+
+// Make globally accessible for the onclick handlers in HTML string
+window.renderCodeUsageDetail = renderCodeUsageDetail;
+window.jumpToSegment = jumpToSegment;
+
+/**
+ * Open Code Manager and Load Data
+ */
+async function openCodeManager(projectId) {
+    codeManagerModal.classList.remove('hidden');
+    const listContainer = document.getElementById('codeManagerList');
+    listContainer.innerHTML = '<div style="text-align: center; padding: 2rem; color: var(--text-muted);">Loading code analysis...</div>';
+
+    // Clear Detail View
+    document.getElementById('codeManagerDetailEmpty').classList.remove('hidden');
+    document.getElementById('codeManagerDetailContent').classList.add('hidden');
+
+    try {
+        // 1. Fetch Codes and All Project Segments in parallel
+        const [codes, allSegments] = await Promise.all([
+            window.loadCodesForProject(projectId),
+            window.getAllCodedSegments(projectId)
+        ]);
+
+        // 2. Aggregate Usage Counts
+        const codeUsageMap = {};
+        allSegments.forEach(seg => {
+            if (!codeUsageMap[seg.codeId]) {
+                codeUsageMap[seg.codeId] = [];
+            }
+            codeUsageMap[seg.codeId].push(seg);
+        });
+
+        // 3. Render Code List (Left Sidebar)
+        renderCodeManagerSidebar(codes, codeUsageMap);
+
+    } catch (error) {
+        console.error("Error loading code manager:", error);
+        listContainer.innerHTML = '<div style="color: red; padding: 1rem;">Error loading data.</div>';
+    }
+}
+
+/**
+ * Render Sidebar List
+ */
+function renderCodeManagerSidebar(codes, codeUsageMap) {
+    const listContainer = document.getElementById('codeManagerList');
+
+    if (!codes || codes.length === 0) {
+        listContainer.innerHTML = '<div style="padding: 1rem; color: var(--text-muted);">No codes created yet.</div>';
+        return;
+    }
+
+    listContainer.innerHTML = codes.map(code => {
+        const usage = codeUsageMap[code.id] || [];
+        const count = usage.length;
+
+        // Escape data for attribute
+        const usageData = JSON.stringify(usage).replace(/"/g, '&quot;');
+
+        return `
+            <div class="code-manager-item" 
+                 onclick="window.renderCodeUsageDetail('${code.id}', '${escapeHtml(code.name)}', '${code.color}', this)"
+                 style="display: flex; align-items: center; justify-content: space-between; padding: 0.75rem; border-radius: 6px; cursor: pointer; transition: background 0.2s; border: 1px solid transparent; margin-bottom: 4px;">
+                <div style="display: flex; align-items: center; gap: 0.75rem;">
+                    <div style="width: 14px; height: 14px; border-radius: 50%; background: ${code.color};"></div>
+                    <span style="font-weight: 500; color: var(--text-title);">${escapeHtml(code.name)}</span>
+                </div>
+                <span class="badge" style="background: ${count > 0 ? '#e2e8f0' : '#f1f5f9'}; color: ${count > 0 ? '#475569' : '#94a3b8'}; padding: 2px 8px; border-radius: 99px; font-size: 0.75rem; font-weight: 600;">
+                    ${count}
+                </span>
+                <!-- Hidden data storage using a data attribute instead of innerHTML for safety -->
+                <div id="data-${code.id}" style="display:none;" data-usage="${usageData}"></div>
+            </div>
+        `;
+    }).join('');
+}
+
+/**
+ * Render Right Content (Occurrences)
+ */
+function renderCodeUsageDetail(codeId, name, color, startEl) {
+    // UI Selection State
+    document.querySelectorAll('.code-manager-item').forEach(el => {
+        el.style.background = 'transparent';
+        el.style.borderColor = 'transparent';
+    });
+    startEl.style.background = 'white';
+    startEl.style.borderColor = 'var(--brand-primary)';
+
+    // Get Data
+    const dataEl = document.getElementById(`data-${codeId}`);
+    const occurrences = JSON.parse(dataEl.dataset.usage || '[]');
+
+    // Update Header
+    document.getElementById('codeManagerDetailEmpty').classList.add('hidden');
+    document.getElementById('codeManagerDetailContent').classList.remove('hidden');
+
+    document.getElementById('codeDetailTitle').textContent = name;
+    document.getElementById('codeDetailColor').style.background = color;
+    document.getElementById('codeDetailCount').textContent = `${occurrences.length} segments`;
+    document.getElementById('codeDetailDesc').textContent = occurrences.length > 0
+        ? `Used in ${new Set(occurrences.map(o => o.interviewId)).size} interviews (Total: ${occurrences.length} times)`
+        : 'This code has not been used in any transcript yet.';
+
+    // Render List
+    const container = document.getElementById('codeSegmentsList');
+    if (occurrences.length === 0) {
+        container.innerHTML = '<div style="color:var(--text-muted); font-style:italic;">No coded segments found.</div>';
+        return;
+    }
+
+    container.innerHTML = occurrences.map(occ => `
+        <div class="segment-card" style="background: #f8fafc; border: 1px solid var(--border-light); border-radius: 8px; padding: 1rem; transition: all 0.2s;">
+            <div style="display: flex; justify-content: space-between; margin-bottom: 0.5rem; font-size: 0.85rem; color: var(--text-muted);">
+                <span style="font-weight: 600; color: var(--text-title);">
+                    ${occ.interviewTitle || 'Unknown Interview'}
+                </span>
+                <span>${occ.segmentSpeaker || 'Speaker'}</span>
+            </div>
+            <div style="font-size: 0.95rem; line-height: 1.5; color: var(--text-body); margin-bottom: 1rem; border-left: 3px solid ${color}; padding-left: 0.75rem;">
+                "${escapeHtml(occ.segmentText)}"
+            </div>
+            <button onclick="window.jumpToSegment('${occ.interviewId}', '${occ.segmentId}')" 
+                    class="btn-secondary small" style="width: 100%; justify-content: center;">
+                Go to Transcript context
+            </button>
+        </div>
+    `).join('');
+}
+
+/**
+ * Jump to Segment Logic
+ */
+async function jumpToSegment(interviewId, segmentId) {
+    // Close Modal
+    codeManagerModal.classList.add('hidden');
+
+    // 1. If currently in the right interview, just scroll
+    if (currentInterviewId === interviewId && !transcriptReviewView.classList.contains('hidden')) {
+        scrollToAndHighlight(segmentId);
+        return;
+    }
+
+    // 2. Otherwise, load the interview first
+    // showTranscriptReviewLoadingState(); // Optional: show loading
+    await loadInterviewView(interviewId);
+
+    // 3. Then scroll after a slight delay to ensure render
+    setTimeout(() => {
+        scrollToAndHighlight(segmentId);
+    }, 800);
+}
+
+function scrollToAndHighlight(segmentId) {
+    const segmentEl = document.getElementById(segmentId);
+    if (segmentEl) {
+        segmentEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        // Add temporary flash effect
+        segmentEl.style.transition = 'background 0.5s';
+        const originalBg = segmentEl.style.backgroundColor;
+        segmentEl.style.backgroundColor = '#fff7ed'; // Flash orange/yellow
+        setTimeout(() => {
+            segmentEl.style.backgroundColor = originalBg || 'transparent';
+        }, 2000);
+    } else {
+        showToast('Could not find segment in this transcript.', 'error');
+    }
+}

@@ -844,3 +844,41 @@ window.loadCodesForProject = loadCodesForProject;
 window.saveCodeAssignment = saveCodeAssignment;
 window.loadCodeAssignments = loadCodeAssignments;
 window.deleteCodeAssignment = deleteCodeAssignment;
+/**
+ * Aggregate all coded segments across all interviews in a project
+ */
+window.getAllCodedSegments = async function (projectId) {
+    if (!currentUser || !projectId) return [];
+
+    try {
+        // Reuse existing fetch
+        const interviews = await window.loadInterviewsForProject(projectId);
+        let allCodedSegments = [];
+
+        interviews.forEach(interview => {
+            if (interview.transcriptSegments && Array.isArray(interview.transcriptSegments)) {
+                interview.transcriptSegments.forEach(segment => {
+                    if (segment.codes && segment.codes.length > 0) {
+                        // Fan-out: One entry per code assignment
+                        segment.codes.forEach(codeId => {
+                            allCodedSegments.push({
+                                codeId: codeId,
+                                segmentId: segment.id,
+                                segmentText: segment.text,
+                                segmentSpeaker: segment.speaker,
+                                interviewId: interview.id,
+                                interviewTitle: interview.title,
+                                interviewDate: interview.createdAt
+                            });
+                        });
+                    }
+                });
+            }
+        });
+
+        return allCodedSegments;
+    } catch (error) {
+        console.error("Error aggregating coded segments:", error);
+        return [];
+    }
+};
