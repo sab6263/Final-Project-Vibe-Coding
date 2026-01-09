@@ -3671,6 +3671,24 @@ function setupReviewModeListeners() {
         };
     }
 
+    // Attach listeners to static speaker badges in toolbar
+    document.querySelectorAll('.draggable-label').forEach(label => {
+        label.addEventListener('dragstart', (e) => {
+            const speaker = label.getAttribute('data-speaker');
+            console.log('Dragging speaker:', speaker);
+            currentDraggingSpeaker = speaker; // Set global tracker
+
+            e.dataTransfer.setData('application/x-speaker-data', JSON.stringify({ speaker: speaker }));
+            e.dataTransfer.setData('type', 'speaker');
+            e.dataTransfer.setData('speaker', speaker);
+            e.dataTransfer.effectAllowed = 'copy';
+        });
+
+        label.addEventListener('dragend', () => {
+            currentDraggingSpeaker = null; // Reset
+        });
+    });
+
     if (newCodeFromReview) {
         newCodeFromReview.onclick = () => {
             if (currentProjectId) {
@@ -4297,6 +4315,7 @@ const revRedoBtn = document.getElementById('revRedoBtn');
 
 let reviewEditMode = true;
 let reviewNotesMode = false;
+let currentDraggingSpeaker = null; // Track which speaker is being dragged for highlighting
 
 // Undo/Redo Stacks
 let reviewHistoryStack = [];
@@ -4951,6 +4970,7 @@ function createReviewSegmentElement(segment) {
     div.style.display = 'grid';
     div.style.gridTemplateColumns = '140px 1fr'; // Increased to prevent wrap
     div.style.gap = '1rem';
+    div.style.alignItems = 'stretch'; // CRITICAL: Make grid items fill full row height
 
     div.style.marginBottom = '0.75rem';
     div.style.marginTop = '0.5rem';
@@ -4960,6 +4980,42 @@ function createReviewSegmentElement(segment) {
         div.style.padding = '0.5rem';
         div.style.borderRadius = '8px';
         div.style.transition = 'background-color 0.2s';
+
+        // Add Listeners for speaker badge dragging
+        // Add Listeners for speaker badge dragging
+        div.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            e.dataTransfer.dropEffect = 'copy';
+
+            // Check global variable since dataTransfer is restricted in dragover
+            const speakerType = currentDraggingSpeaker;
+
+            // Add appropriate class based on speaker type
+            if (speakerType === 'interviewer') {
+                div.classList.add('drag-over-interviewer');
+                div.classList.remove('drag-over-participant', 'drag-over-speaker');
+            } else if (speakerType === 'participant') {
+                div.classList.add('drag-over-participant');
+                div.classList.remove('drag-over-interviewer', 'drag-over-speaker');
+            } else {
+                // Fallback (e.g. if dragging something else or global var missing)
+                div.classList.add('drag-over-speaker');
+                div.classList.remove('drag-over-interviewer', 'drag-over-participant');
+            }
+        });
+
+        div.addEventListener('dragleave', (e) => {
+            // Only remove if we are leaving the element proper, not entering a child
+            if (!div.contains(e.relatedTarget)) {
+                div.classList.remove('drag-over-speaker', 'drag-over-interviewer', 'drag-over-participant');
+            }
+        });
+
+        div.addEventListener('drop', (e) => {
+            div.classList.remove('drag-over-speaker', 'drag-over-interviewer', 'drag-over-participant');
+            // We need to handle the drop here too or bubble it up? 
+            // The existing drop listener on document might handle it, but let's see.
+        });
     }
 
     // Connect visually to previous speaker block if no speaker change
@@ -4971,6 +5027,10 @@ function createReviewSegmentElement(segment) {
     const sidebarDiv = document.createElement('div');
     sidebarDiv.className = 'segment-sidebar';
     sidebarDiv.style.textAlign = 'left'; // Left align as requested
+    sidebarDiv.style.display = 'flex';
+    sidebarDiv.style.flexDirection = 'column';
+    sidebarDiv.style.alignSelf = 'stretch'; // Force to fill grid cell height
+    sidebarDiv.style.minHeight = '100%';
     div.appendChild(sidebarDiv);
 
     // Speaker Label

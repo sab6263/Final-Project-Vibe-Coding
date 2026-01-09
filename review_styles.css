@@ -380,3 +380,46 @@
     font-weight: 600;
     color: var(--text-title);
 }
+
+/* ============================================================================
+   DRAG & DROP HIGHLIGHTING
+   ============================================================================ */
+
+/* Speaker Drag Highlights */
+
+/* Generic/Fallback */
+.review-segment.drag-over-speaker .segment-sidebar {
+    background-color: rgba(59, 130, 246, 0.15);
+    border-left: 4px solid var(--brand-primary);
+    padding-left: 6px;
+}
+
+/* INTERVIEWER - Grey Highlight */
+.review-segment.drag-over-interviewer .segment-sidebar {
+    background-color: #f1f5f9;
+    /* Light grey background */
+    border-left: 4px solid #64748b;
+    /* Slate grey border */
+    padding-left: 6px;
+
+    /* Critical layout properties repeated to ensure override */
+    align-self: stretch !important;
+    min-height: 100%;
+    display: flex;
+    flex-direction: column;
+}
+
+/* PARTICIPANT - Blue Highlight */
+.review-segment.drag-over-participant .segment-sidebar {
+    background-color: rgba(30, 64, 175, 0.1);
+    /* Dark blue tint */
+    border-left: 4px solid #1e40af;
+    /* Dark blue border */
+    padding-left: 6px;
+
+    /* Critical layout properties repeated to ensure override */
+    align-self: stretch !important;
+    min-height: 100%;
+    display: flex;
+    flex-direction: column;
+}
