@@ -144,9 +144,18 @@
                     </div>
                 </header>
 
+                <!-- Quick Links -->
+                <nav class="project-quick-nav">
+                    <div class="quick-nav-container">
+                        <a href="#section-guidelines" class="quick-nav-link">Guidelines</a>
+                        <a href="#section-interviews" class="quick-nav-link">Interviews</a>
+                        <a href="#section-codes" class="quick-nav-link">Codes</a>
+                    </div>
+                </nav>
+
                 <div class="detail-grid">
                     <!-- Panel A: Guidelines -->
-                    <section class="panel">
+                    <section id="section-guidelines" class="panel">
                         <div class="panel-header">
                             <h2>Interview Guidelines</h2>
                             <button id="createGuidelineBtn" class="btn-primary small">
@@ -164,7 +173,7 @@
                     </section>
 
                     <!-- Panel B: Interviews -->
-                    <section class="panel">
+                    <section id="section-interviews" class="panel">
                         <div class="panel-header">
                             <h2>Interviews</h2>
                             <button id="createInterviewBtn" class="btn-primary small">
@@ -182,7 +191,7 @@
                     </section>
 
                     <!-- Panel C: Codes -->
-                    <section class="panel">
+                    <section id="section-codes" class="panel">
                         <div class="panel-header">
                             <h2>Codes</h2>
                             <div style="display: flex; gap: 0.5rem;">
@@ -207,6 +216,10 @@
                                 </svg>
                                 Analyze Data
                             </button>
+                        </div>
+                        <div style="padding: 0 1rem 1rem 1rem;">
+                            <input type="text" id="codeSearchInput" placeholder="Search codes..."
+                                style="width: 100%; max-width: 250px; border: 1px solid #cbd5e1; padding: 0.5rem 0.8rem; border-radius: 8px; font-size: 0.9rem; outline: none; transition: border-color 0.2s;">
                         </div>
                         <div id="codesList" class="list-container empty-list-placeholder">
                             <p>No codes yet.</p>

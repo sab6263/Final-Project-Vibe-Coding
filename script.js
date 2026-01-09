@@ -532,6 +532,11 @@ async function openProject(id) {
 
     currentProjectId = id;
 
+    // Reset code search
+    codeSearchQuery = '';
+    const codeSearchInput = document.getElementById('codeSearchInput');
+    if (codeSearchInput) codeSearchInput.value = '';
+
     // Populate Data
     detailProjectTitle.textContent = project.name;
 
@@ -574,61 +579,85 @@ async function openProject(id) {
 let currentCodeData = null; // { projectId, codeId? }
 let selectedColor = '#3b82f6'; // Default blue
 
-/**
- * Render codes list for a project
- */
+let currentProjectCodes = [];
+let codeSearchQuery = '';
+
+// Add listener for code search
+const codeSearchInput = document.getElementById('codeSearchInput');
+if (codeSearchInput) {
+    codeSearchInput.addEventListener('input', (e) => {
+        codeSearchQuery = e.target.value.toLowerCase();
+        renderFilteredCodes();
+    });
+}
+
 /**
  * Render codes list for a project
  */
 async function renderCodesList(projectId) {
     const list = document.getElementById('codesList');
-    if (!list) {
-        console.warn('codesList element not found');
-        return;
-    }
+    if (!list) return;
 
     try {
         list.className = 'list-container loading-state';
         list.innerHTML = '<p>Loading codes...</p>';
 
         const codes = await window.loadCodesForProject(projectId);
+        currentProjectCodes = codes || []; // Store for filtering
 
-        if (!codes || codes.length === 0) {
-            list.className = 'list-container empty-list-placeholder';
-            list.innerHTML = '<p>No codes yet.</p>';
-            return;
-        }
-
-        list.className = 'list-container';
-        list.innerHTML = codes.map(code => `
-            <div class="code-item" data-code-id="${code.id}">
-                <div class="code-item-left">
-                    <div class="code-color-preview" style="background: ${code.color};"></div>
-                    <div class="code-item-info">
-                        <div class="code-item-name">${escapeHtml(code.name || 'Untitled')}</div>
-                    </div>
-                </div>
-                <div class="code-item-actions">
-                    <button onclick="window.editCode('${projectId}', '${code.id}')" title="Edit code">
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
-                            <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
-                        </svg>
-                    </button>
-                    <button class="delete-code-btn" onclick="window.deleteCodeWithConfirm('${code.id}')" title="Delete code">
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <polyline points="3 6 5 6 21 6"></polyline>
-                            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
-                        </svg>
-                    </button>
-                </div>
-            </div>
-        `).join('');
+        renderFilteredCodes();
 
     } catch (error) {
         console.error('Error rendering codes:', error);
         list.innerHTML = '<p style="color: var(--text-muted); text-align: center;">Error loading codes</p>';
     }
+}
+
+function renderFilteredCodes() {
+    const list = document.getElementById('codesList');
+    if (!list) return;
+
+    const filteredCodes = currentProjectCodes.filter(code =>
+        (code.name || '').toLowerCase().includes(codeSearchQuery)
+    );
+
+    if (filteredCodes.length === 0) {
+        if (currentProjectCodes.length === 0) {
+            list.className = 'list-container empty-list-placeholder';
+            list.innerHTML = '<p>No codes yet.</p>';
+        } else {
+            // Search yielded no results
+            list.className = 'list-container';
+            list.innerHTML = '<p style="text-align:center; color: var(--text-muted); padding: 1rem;">No codes match your search.</p>';
+        }
+        return;
+    }
+
+    list.className = 'list-container';
+    list.innerHTML = filteredCodes.map(code => `
+        <div class="code-item" data-code-id="${code.id}">
+            <div class="code-item-left">
+                <div class="code-color-preview" style="background: ${code.color};"></div>
+                <div class="code-item-info">
+                    <div class="code-item-name">${escapeHtml(code.name || 'Untitled')}</div>
+                </div>
+            </div>
+            <div class="code-item-actions">
+                <button onclick="window.editCode('${currentProjectId}', '${code.id}')" title="Edit code">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                        <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+                    </svg>
+                </button>
+                <button class="delete-code-btn" onclick="window.deleteCodeWithConfirm('${code.id}')" title="Delete code">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <polyline points="3 6 5 6 21 6"></polyline>
+                        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2-2v2"></path>
+                    </svg>
+                </button>
+            </div>
+        </div>
+    `).join('');
 }
 
 /**
