@@ -5669,7 +5669,7 @@ async function openCodeManager(projectId, initialCodeId = null, isFocused = fals
         if (sidebar) sidebar.style.display = 'none';
         if (modalBody) modalBody.style.gridTemplateColumns = '1fr';
         if (modalTitle) modalTitle.textContent = 'Code Usage Detail';
-        if (backBtn) backBtn.classList.remove('hidden');
+        if (backBtn) backBtn.classList.add('hidden');
     } else {
         if (sidebar) sidebar.style.display = 'block';
         if (modalBody) modalBody.style.gridTemplateColumns = '300px 1fr';

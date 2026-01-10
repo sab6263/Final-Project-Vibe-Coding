@@ -587,6 +587,10 @@ body.fullscreen-active #interviewDetailView {
     z-index: 9999 !important;
 }
 
+#universalConfirmModal {
+    z-index: 10000 !important;
+}
+
 .modal-overlay {
     position: fixed;
     top: 0;
