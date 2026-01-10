@@ -2154,3 +2154,50 @@ input:checked+.slider:before {
 #deleteConfirmModal {
     z-index: 9999 !important;
 }
+
+/* ==========================================================================
+   Analyze Data Button (Orange)
+   ========================================================================== */
+#openCodeManagerBtn {
+    width: 100%;
+    /* margin-top: 0.5rem; handled by parent padding */
+    padding: 0.8rem 1rem;
+    background: white;
+    color: #f97316;
+    /* Clean Orange */
+    font-weight: 700;
+    font-family: 'Inter', sans-serif;
+    border: 1.5px solid #fdba74;
+    /* Soft Orange border */
+    border-radius: var(--radius-md);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.6rem;
+    cursor: pointer;
+    box-shadow: 0 1px 3px rgba(249, 115, 22, 0.1);
+    transition: all 0.2s ease;
+    position: relative;
+    overflow: hidden;
+    font-size: 0.9rem;
+}
+
+#openCodeManagerBtn:hover {
+    background: white;
+    border-color: #f97316;
+    box-shadow: 0 4px 12px rgba(249, 115, 22, 0.08);
+    transform: translateY(-1px);
+}
+
+#openCodeManagerBtn:active {
+    background: #fff1e2;
+    transform: translateY(0);
+}
+
+#openCodeManagerBtn svg {
+    transition: transform 0.2s ease;
+}
+
+#openCodeManagerBtn:hover svg {
+    transform: scale(1.1);
+}

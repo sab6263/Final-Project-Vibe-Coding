@@ -206,9 +206,8 @@
                             </div>
                         </div>
                         <div style="padding: 0 1rem 1rem 1rem;">
-                            <button id="openCodeManagerBtn" title="Analyze Codes"
-                                style="width: 100%; border: 1px solid #cbd5e1; background: white; color: var(--text-title); padding: 0.6rem; border-radius: 8px; font-weight: 600; display: flex; align-items: center; justify-content: center; gap: 0.5rem; transition: all 0.2s; box-shadow: 0 1px 2px rgba(0,0,0,0.05);">
-                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            <button id="openCodeManagerBtn">
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                                     stroke-width="2">
                                     <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
                                     <line x1="3" y1="9" x2="21" y2="9"></line>
@@ -225,6 +224,60 @@
                             <p>No codes yet.</p>
                         </div>
                     </section>
+                </div>
+            </div>
+
+            <!-- VIEW: Analysis / Axial Coding -->
+            <div id="analysisView" class="hidden">
+                <header class="detail-header">
+                    <div class="header-left">
+                        <button id="backToProjectFromAnalysisBtn" class="icon-btn back-btn" title="Back to Project">
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                stroke-width="2">
+                                <path d="M19 12H5M12 19l-7-7 7-7" />
+                            </svg>
+                        </button>
+                        <h1>Analysis & Coding</h1>
+                    </div>
+                </header>
+
+                <div class="analysis-workspace"
+                    style="display: grid; grid-template-columns: 320px 1fr; gap: 1.5rem; height: calc(100vh - 140px);">
+                    <!-- Sidebar -->
+                    <aside class="analysis-sidebar"
+                        style="background: white; border-radius: var(--radius-lg); border: 1px solid rgba(0,0,0,0.1); display: flex; flex-direction: column; overflow: hidden;">
+                        <div style="padding: 1.5rem; border-bottom: 1px solid rgba(0,0,0,0.05);">
+                            <h3 style="margin: 0; font-size: 1.1rem; font-weight: 700; color: var(--text-title);">Codes
+                            </h3>
+                        </div>
+                        <div id="analysisCodesList"
+                            style="flex: 1; overflow-y: auto; padding: 1rem; display: flex; flex-direction: column; gap: 0.5rem;">
+                            <!-- Codes List Items -->
+                        </div>
+                    </aside>
+
+                    <!-- Main Content -->
+                    <main class="analysis-main"
+                        style="background: white; border-radius: var(--radius-lg); border: 1px solid rgba(0,0,0,0.1); overflow: hidden; display: flex; flex-direction: column;">
+                        <div id="analysisDetailEmpty"
+                            style="flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; color: var(--text-muted);">
+                            <div class="empty-state-icon" style="margin-bottom: 1rem; color: rgba(0,0,0,0.1);">
+                                <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                    stroke-width="1.5">
+                                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                                    <polyline points="14 2 14 8 20 8"></polyline>
+                                    <line x1="16" y1="13" x2="8" y2="13"></line>
+                                    <line x1="16" y1="17" x2="8" y2="17"></line>
+                                    <line x1="10" y1="9" x2="8" y2="9"></line>
+                                </svg>
+                            </div>
+                            <p>Select a code to view usage details and insights.</p>
+                        </div>
+                        <div id="analysisDetailContent" class="hidden"
+                            style="flex: 1; display: flex; flex-direction: column; overflow: hidden; padding: 2rem;">
+                            <!-- Detail view content injected here -->
+                        </div>
+                    </main>
                 </div>
             </div>
             <!-- VIEW: Guideline Editor -->

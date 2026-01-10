@@ -635,7 +635,7 @@ function renderFilteredCodes() {
 
     list.className = 'list-container';
     list.innerHTML = filteredCodes.map(code => `
-        <div id="code-item-${code.id}" class="code-item" data-code-id="${code.id}" data-code-name="${escapeHtml(code.name || '')}" data-code-color="${code.color}" onclick="openCodeManager('${currentProjectId}', '${code.id}', true)" style="cursor: pointer;">
+        <div id="code-item-${code.id}" class="code-item" data-code-id="${code.id}" data-code-name="${escapeHtml(code.name || '')}" data-code-color="${code.color}" onclick="openAnalysisPage('${currentProjectId}', '${code.id}')" style="cursor: pointer;">
             <div class="code-item-left">
                 <div class="code-color-preview" style="background: ${code.color};"></div>
                 <div class="code-item-info">
@@ -643,7 +643,7 @@ function renderFilteredCodes() {
                 </div>
             </div>
             <div class="code-item-actions">
-                <button onclick="event.stopPropagation(); window.editCode('${currentProjectId}', '${code.id}')" title="Edit code">
+                <button onclick="event.stopPropagation(); window.editCode('${code.id}')" title="Edit code">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
                         <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
@@ -5637,7 +5637,7 @@ const openCodeManagerBtn = document.getElementById('openCodeManagerBtn');
 
 if (openCodeManagerBtn) {
     openCodeManagerBtn.addEventListener('click', () => {
-        if (currentProjectId) openCodeManager(currentProjectId);
+        if (currentProjectId) openAnalysisPage(currentProjectId);
     });
 }
 
@@ -5648,41 +5648,107 @@ if (closeCodeManagerModal) {
 }
 
 // Make globally accessible
-window.renderCodeUsageDetail = renderCodeUsageDetail;
+window.renderAnalysisDetail = renderAnalysisDetail;
 window.jumpToSegment = jumpToSegment;
 
-/**
- * Open Code Manager and Load Data
- */
-async function openCodeManager(projectId, initialCodeId = null, isFocused = false) {
-    const modal = document.getElementById('codeManagerModal');
-    const sidebar = modal.querySelector('.code-manager-sidebar');
-    const modalBody = modal.querySelector('.modal-body');
-    const modalTitle = modal.querySelector('.modal-header h2');
-    const backBtn = document.getElementById('managerBackButton');
+// ... (rest of the file is okay, skipping to editCode) ...
 
-    if (!modal) return;
-    modal.classList.remove('hidden');
+window.confirmDeleteCode = function (codeId) {
+    openConfirmModal('Delete Code', 'Are you sure?', 'Delete', () => performDeleteCode(codeId));
+};
 
-    // Toggle Focus Mode
-    if (isFocused && initialCodeId) {
-        if (sidebar) sidebar.style.display = 'none';
-        if (modalBody) modalBody.style.gridTemplateColumns = '1fr';
-        if (modalTitle) modalTitle.textContent = 'Code Usage Detail';
-        if (backBtn) backBtn.classList.add('hidden');
-    } else {
-        if (sidebar) sidebar.style.display = 'block';
-        if (modalBody) modalBody.style.gridTemplateColumns = '300px 1fr';
-        if (modalTitle) modalTitle.textContent = 'Code Manager & Analysis';
-        if (backBtn) backBtn.classList.add('hidden');
+window.editCode = function (codeId) {
+    const modal = document.getElementById('codeModal');
+    const nameInput = document.getElementById('codeName');
+    const title = document.getElementById('codeModalTitle');
+
+    let name = "";
+    let color = "";
+
+    // Try to find from sidebar item (Analysis View)
+    const item = document.getElementById(`analysis-code-item-${codeId}`);
+    if (item) {
+        name = item.dataset.codeName;
+        color = item.dataset.codeColor;
+    }
+    // Fallback: Check Detail View (Analysis View)
+    else {
+        const dContent = document.getElementById('analysisDetailContent');
+        if (dContent && dContent.dataset.currentCodeId === codeId) {
+            // We are in detail view, title is in h2
+            const dTitle = dContent.querySelector('h2');
+            if (dTitle) name = dTitle.textContent.trim();
+            color = dContent.dataset.currentCodeColor;
+        }
+        // Fallback: Check old Code Manager Item (Modal)
+        else {
+            const oldItem = document.getElementById(`manager-code-item-${codeId}`);
+            if (oldItem) {
+                name = oldItem.dataset.codeName;
+                color = oldItem.dataset.codeColor;
+            }
+        }
     }
 
-    const listContainer = document.getElementById('codeManagerList');
-    listContainer.innerHTML = '<div style="text-align: center; padding: 2rem; color: var(--text-muted);">Loading code analysis...</div>';
+    if (title) title.textContent = "Edit Code";
+    if (nameInput) nameInput.value = name;
+
+    // Select color in UI
+    document.querySelectorAll('.color-option, .custom-color-wrapper').forEach(el => el.classList.remove('selected'));
+    let found = false;
+    document.querySelectorAll('.color-option').forEach(el => {
+        if (el.dataset.color.toLowerCase() === (color || '').toLowerCase()) {
+            el.classList.add('selected');
+            found = true;
+        }
+    });
+    if (!found && color) {
+        const cw = document.querySelector('.custom-color-wrapper');
+        const ci = document.getElementById('customColorInput');
+        const cb = document.getElementById('customColorBubble');
+        if (cw && ci && cb) {
+            cw.classList.add('selected');
+            ci.value = color;
+            cb.style.background = color;
+        }
+    }
+
+    openCodeModal(currentProjectId, codeId);
+};
+
+// ============================================================================
+// ANALYSIS & CODE MANAGEMENT (AXIAL CODING)
+// ============================================================================
+
+window.openAnalysisPage = openAnalysisPage;
+
+async function openAnalysisPage(projectId, initialCodeId = null) {
+    // 1. Switch Views
+    document.getElementById('projectsOverview').classList.add('hidden');
+    document.getElementById('projectDetailView').classList.add('hidden');
+    document.getElementById('guidelineEditorView').classList.add('hidden');
+    document.getElementById('transcriptReviewView').classList.add('hidden');
+    document.getElementById('interviewDetailView').classList.add('hidden');
+    document.getElementById('analysisView').classList.remove('hidden');
+
+    // 2. Setup Back Button
+    const backBtn = document.getElementById('backToProjectFromAnalysisBtn');
+    backBtn.onclick = () => {
+        document.getElementById('analysisView').classList.add('hidden');
+        document.getElementById('projectDetailView').classList.remove('hidden');
+    };
+
+    // 3. Loading State
+    const listContainer = document.getElementById('analysisCodesList');
+    listContainer.innerHTML = '<div style="text-align: center; padding: 2rem; color: var(--text-muted);">Loading analysis...</div>';
 
     // Clear Detail View
-    document.getElementById('codeManagerDetailEmpty').classList.remove('hidden');
-    document.getElementById('codeManagerDetailContent').classList.add('hidden');
+    document.getElementById('analysisDetailEmpty').classList.remove('hidden');
+    document.getElementById('analysisDetailContent').classList.add('hidden');
+
+    // Clear selection state
+    document.querySelectorAll('.code-manager-item').forEach(el => el.classList.remove('active'));
+
 
     try {
         const [codes, allSegments] = await Promise.all([
@@ -5696,29 +5762,31 @@ async function openCodeManager(projectId, initialCodeId = null, isFocused = fals
             codeUsageMap[seg.codeId].push(seg);
         });
 
-        renderCodeManagerSidebar(codes, codeUsageMap);
+        renderAnalysisSidebar(codes, codeUsageMap);
 
         if (initialCodeId) {
             const code = codes.find(c => c.id === initialCodeId);
             if (code) {
-                const startEl = document.getElementById(`manager-code-item-${code.id}`);
-                renderCodeUsageDetail(code.id, code.name, code.color, startEl);
+                const startEl = document.getElementById(`analysis-code-item-${code.id}`);
+                renderAnalysisDetail(code.id, code.name, code.color, startEl);
             }
         }
     } catch (error) {
-        console.error("Error loading code manager:", error);
-        if (listContainer) listContainer.innerHTML = '<div style="color: red; padding: 1rem;">Error loading data.</div>';
+        console.error("Error loading analysis page:", error);
+        listContainer.innerHTML = '<div style="color: #ef4444; padding: 1rem; text-align: center;">Error loading data.</div>';
     }
 }
 
-window.openCodeManager = openCodeManager;
-
-function renderCodeManagerSidebar(codes, codeUsageMap) {
-    const listContainer = document.getElementById('codeManagerList');
+function renderAnalysisSidebar(codes, codeUsageMap) {
+    const listContainer = document.getElementById('analysisCodesList');
     if (!listContainer) return;
 
     if (!codes || codes.length === 0) {
-        listContainer.innerHTML = '<div style="padding: 1rem; color: var(--text-muted);">No codes created yet.</div>';
+        listContainer.innerHTML = `
+            <div style="flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 2rem; color: var(--text-muted);">
+                <p>No codes created yet.</p>
+                <button onclick="document.getElementById('analysisView').classList.add('hidden'); document.getElementById('projectDetailView').classList.remove('hidden'); document.getElementById('section-codes').scrollIntoView();" class="btn-secondary small" style="margin-top: 0.5rem;">Create Code</button>
+            </div>`;
         return;
     }
 
@@ -5728,66 +5796,72 @@ function renderCodeManagerSidebar(codes, codeUsageMap) {
 
         return `
             <div class="code-manager-item code-item" 
-                 id="manager-code-item-${code.id}"
+                 id="analysis-code-item-${code.id}"
                  data-code-name="${escapeHtml(code.name)}"
                  data-code-color="${code.color}"
-                 onclick="window.renderCodeUsageDetail('${code.id}', '${escapeHtml(code.name)}', '${code.color}', this)"
-                 style="position: relative;">
-                <div class="code-item-left">
-                    <div class="code-color-preview" style="background: ${code.color};"></div>
-                    <span class="code-item-name">${escapeHtml(code.name)}</span>
-                </div>
-                <div class="code-item-actions">
-                     <button onclick="event.stopPropagation(); window.editCode('${code.id}')" title="Edit">
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
-                     </button>
-                     <button onclick="event.stopPropagation(); window.confirmDeleteCode('${code.id}')" class="delete-code-btn" title="Delete">
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
-                     </button>
+                 onclick="window.renderAnalysisDetail('${code.id}', '${escapeHtml(code.name)}', '${code.color}', this)"
+                 style="position: relative; padding: 0.75rem 1rem; border-radius: 8px; border: 1px solid transparent; cursor: pointer; transition: all 0.2s; background: transparent;">
+                <div class="code-item-left" style="pointer-events: none;">
+                    <div class="code-color-preview" style="background: ${code.color}; width: 14px; height: 14px; border-radius: 50%;"></div>
+                    <span class="code-item-name" style="font-weight: 500; font-size: 0.95rem; color: var(--text-body);">${escapeHtml(code.name)}</span>
                 </div>
                 <div id="data-${code.id}" style="display:none;" data-usage="${usageData}"></div>
+                 <div style="margin-left: auto; display: flex; align-items: center; gap: 0.5rem;">
+                     <span style="font-size: 0.75rem; color: var(--text-muted); font-weight: 500;">${usage.length}</span>
+                </div>
             </div>`;
     }).join('');
 }
 
-function renderCodeUsageDetail(codeId, name, color, startEl) {
+window.renderAnalysisDetail = renderAnalysisDetail;
+
+function renderAnalysisDetail(codeId, name, color, startEl) {
     // UI Selection State
     document.querySelectorAll('.code-manager-item').forEach(el => {
         el.style.background = 'transparent';
         el.style.borderColor = 'transparent';
         el.classList.remove('active');
+        // Restore hover effect placeholder if needed, mostly handled by CSS
+        el.querySelector('.code-item-name').style.fontWeight = '500';
     });
 
     if (startEl) {
-        startEl.style.background = 'white';
-        startEl.style.borderColor = 'var(--brand-primary)';
+        startEl.style.background = '#f8fafc';
+        startEl.style.borderColor = '#e2e8f0';
         startEl.classList.add('active');
+        startEl.querySelector('.code-item-name').style.fontWeight = '700';
     }
 
     const dataEl = document.getElementById(`data-${codeId}`);
     if (!dataEl) return;
     const occurrences = JSON.parse(dataEl.dataset.usage || '[]');
 
-    document.getElementById('codeManagerDetailEmpty').classList.add('hidden');
-    document.getElementById('codeManagerDetailContent').classList.remove('hidden');
+    document.getElementById('analysisDetailEmpty').classList.add('hidden');
+    const detailContent = document.getElementById('analysisDetailContent');
+    detailContent.classList.remove('hidden');
 
-    const titleContainer = document.querySelector('#codeManagerDetailContent .detail-header');
-    const detailContentElement = document.getElementById('codeManagerDetailContent');
-    detailContentElement.dataset.currentCodeColor = color;
-    detailContentElement.dataset.currentCodeId = codeId;
+    detailContent.dataset.currentCodeColor = color;
+    detailContent.dataset.currentCodeId = codeId;
 
     // Header Design
-    // Header Design
-    titleContainer.innerHTML = `
-        <div style="display: flex; flex-direction: column; gap: 0.5rem; margin-bottom: 2rem; width: 100%;">
-            <div style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
-                <div style="display: flex; align-items: center; gap: 0.75rem; flex: 1;">
-                    <div style="width: 18px; height: 18px; border-radius: 50%; background: ${color}; flex-shrink: 0;"></div>
-                    <h3 style="margin: 0; font-size: 1.85rem; font-weight: 800; color: var(--text-title); letter-spacing: -0.02em; line-height: 1.2;">
-                        ${escapeHtml(name)}
-                    </h3>
+    detailContent.innerHTML = `
+        <div style="margin-bottom: 2rem;">
+            <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+                <div style="display: flex; gap: 1rem; align-items: center;">
+                    <div style="width: 24px; height: 24px; border-radius: 50%; background: ${color}; flex-shrink: 0; box-shadow: 0 2px 4px rgba(0,0,0,0.1);"></div>
+                    <div>
+                        <h2 style="margin: 0; font-size: 2rem; font-weight: 800; color: var(--text-title); letter-spacing: -0.03em; line-height: 1.1;">
+                            ${escapeHtml(name)}
+                        </h2>
+                         <div style="display: flex; align-items: center; gap: 0.75rem; margin-top: 0.5rem;">
+                            <span class="badge" style="background: ${color}15; color: ${color}; border: 1px solid ${color}30; font-weight: 600; padding: 0.2rem 0.6rem; border-radius: 6px; font-size: 0.8rem;">${occurrences.length} instances</span>
+                            <span style="width: 4px; height: 4px; background: #cbd5e1; border-radius: 50%;"></span>
+                            <span style="color: var(--text-muted); font-size: 0.9rem;">Used across ${new Set(occurrences.map(o => o.interviewId)).size} transcripts</span>
+                        </div>
+                    </div>
                 </div>
-                <div style="display: flex; gap: 0.65rem; margin-left: auto;">
+                
+                 <div style="display: flex; gap: 0.5rem;">
                     <button onclick="window.editCode('${codeId}')" class="btn-secondary small" style="border-radius: 8px; padding: 0.5rem 1rem;">
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right: 6px;"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
                         Edit
@@ -5798,20 +5872,19 @@ function renderCodeUsageDetail(codeId, name, color, startEl) {
                     </button>
                 </div>
             </div>
-            
-            <div style="display: flex; align-items: center; gap: 0.75rem; padding-left: calc(18px + 0.75rem);">
-                <span class="badge" style="background: ${color}15; color: ${color}; border: 1px solid ${color}30; font-weight: 600;">${occurrences.length} instances</span>
-                <span style="width: 4px; height: 4px; background: #cbd5e1; border-radius: 50%;"></span>
-                <span style="color: var(--text-muted); font-size: 0.85rem;">Used across ${new Set(occurrences.map(o => o.interviewId)).size} transcripts</span>
-            </div>
+        </div>
+
+        <div id="analysisSegmentsContainer" style="flex: 1; overflow-y: auto; padding-right: 0.5rem;">
+             <!-- Segments injected here -->
         </div>
     `;
 
+
     // Grouping Logic
-    const container = document.getElementById('codeSegmentsList');
+    const container = document.getElementById('analysisSegmentsContainer');
     if (occurrences.length === 0) {
         container.innerHTML = `
-            <div style="text-align: center; padding: 4rem 2rem; background: #f8fafc; border: 2px dashed #e2e8f0; border-radius: 12px; color: var(--text-muted);">
+            <div style="text-align: center; padding: 4rem 2rem; background: #f8fafc; border: 2px dashed #e2e8f0; border-radius: 12px; color: var(--text-muted); margin-top: 2rem;">
                 <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="margin-bottom: 1rem; opacity: 0.5;"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
                 <p style="margin: 0; font-weight: 500;">No coded segments found for this code.</p>
                 <p style="margin: 0.5rem 0 0; font-size: 0.85rem;">Start coding in transcript review to see analysis here.</p>
@@ -5828,60 +5901,60 @@ function renderCodeUsageDetail(codeId, name, color, startEl) {
         return acc;
     }, {});
 
-    container.innerHTML = Object.entries(grouped).map(([intId, data]) => `
-        <div class="interview-group" style="margin-bottom: 2rem;">
-            <div style="display: flex; align-items: center; gap: 0.75rem; margin-bottom: 1rem; padding: 0.5rem 0; border-bottom: 1px solid #f1f5f9;">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="color: var(--text-muted);"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
-                <h4 style="margin: 0; font-size: 0.9rem; font-weight: 700; color: var(--text-title); text-transform: uppercase; letter-spacing: 0.05em;">${escapeHtml(data.title)}</h4>
-                <span style="font-size: 0.75rem; color: var(--text-muted); font-weight: 500; background: #f1f5f9; padding: 2px 8px; border-radius: 12px; margin-left: auto;">${data.segments.length} instance${data.segments.length === 1 ? '' : 's'}</span>
-            </div>
-            
-            <div style="display: flex; flex-direction: column; gap: 0.75rem;">
-                ${data.segments.map(occ => {
-        let speaker = occ.segmentSpeaker || 'Speaker';
-        if (speaker.toLowerCase() === 'interviewer') speaker = 'Interviewer';
-        else if (speaker.toLowerCase() === 'participant') speaker = 'Participant';
-
+    const html = Object.keys(grouped).map(interviewId => {
+        const group = grouped[interviewId];
         return `
-                        <div class="segment-card" onclick="window.jumpToSegment('${occ.interviewId}', '${occ.segmentId}')"
-                             style="background: white; border: 1px solid #e2e8f0; border-radius: 10px; padding: 1.25rem; transition: all 0.2s; cursor: pointer; position: relative; overflow: hidden; display: flex; flex-direction: column; gap: 0.75rem;">
-                            
-                            <!-- Accent line -->
-                            <div style="position: absolute; left: 0; top: 0; bottom: 0; width: 4px; background: ${color};"></div>
-
-                            <div style="display: flex; justify-content: space-between; align-items: center;">
-                                <span style="font-size: 0.75rem; font-weight: 700; color: ${speaker === 'Interviewer' ? '#64748b' : '#3b82f6'}; text-transform: uppercase;">${speaker}</span>
-                                <div class="go-indicator" style="color: var(--text-muted); display: flex; align-items: center; gap: 0.25rem; font-size: 0.75rem; font-weight: 600; opacity: 0; transform: translateX(-5px); transition: all 0.2s;">
-                                    View in Context
-                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
-                                </div>
-                            </div>
-
-                            <div style="font-size: 1rem; line-height: 1.6; color: var(--text-body); font-style: italic;">
-                                "${escapeHtml(occ.segmentText)}"
-                            </div>
+            <div style="margin-bottom: 2.5rem; animation: slideUp 0.3s ease-out;">
+                <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 1rem; padding-bottom: 0.5rem; border-bottom: 1px solid #f1f5f9;">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color: var(--text-muted);"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
+                    <h4 style="margin: 0; font-size: 0.95rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em;">${escapeHtml(group.title)}</h4>
+                    <span style="font-size: 0.8rem; background: #f1f5f9; padding: 0.1rem 0.5rem; border-radius: 10px; color: var(--text-muted);">${group.segments.length} instance${group.segments.length !== 1 ? 's' : ''}</span>
+                    <button onclick="document.getElementById('analysisView').classList.add('hidden'); window.openReview('${interviewId}');" style="margin-left: auto; background: transparent; border: none; font-size: 0.8rem; font-weight: 600; color: var(--brand-primary); cursor: pointer; display: flex; align-items: center; gap: 4px;">
+                        Go to transcript <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg>
+                    </button>
+                </div>
+                
+                <div style="display: flex; flex-direction: column; gap: 1rem;">
+                    ${group.segments.map(seg => `
+                        <div class="analysis-segment-card" onclick="window.jumpToSegment('${interviewId}', '${seg.segmentId}')" style="background: white; border: 1px solid #e2e8f0; border-left: 4px solid ${color}; border-radius: 8px; padding: 1.25rem; cursor: pointer; transition: all 0.2s; position: relative;">
+                            <div style="font-size: 0.75rem; font-weight: 700; color: var(--brand-primary); margin-bottom: 0.5rem; text-transform: uppercase;">${seg.speaker || 'SPEAKER'}</div>
+                            <div style="font-size: 1.05rem; line-height: 1.6; color: var(--text-body); font-family: 'Inter', sans-serif;">"${escapeHtml(seg.text)}"</div>
                         </div>
-                    `;
-    }).join('')}
+                    `).join('')}
+                </div>
             </div>
-        </div>
-    `).join('');
-
-    // Add CSS for the View in Context indicator hover
-    if (!document.getElementById('codeManagerStyles')) {
-        const style = document.createElement('style');
-        style.id = 'codeManagerStyles';
-        style.textContent = `
-            .segment-card:hover { border-color: #cbd5e1 !important; box-shadow: 0 4px 12px rgba(0,0,0,0.05); transform: translateY(-2px); }
-            .segment-card:hover .go-indicator { opacity: 1 !important; transform: translateX(0) !important; }
-            .interview-group:last-child { margin-bottom: 0 !important; }
         `;
-        document.head.appendChild(style);
-    }
+    }).join('');
+
+    container.innerHTML = html;
+
+    // Add hover effects via JS for now (or CSS later)
+    container.querySelectorAll('.analysis-segment-card').forEach(card => {
+        card.addEventListener('mouseenter', () => {
+            card.style.transform = 'translateY(-2px)';
+            card.style.boxShadow = '0 4px 12px rgba(0,0,0,0.05)';
+        });
+        card.addEventListener('mouseleave', () => {
+            card.style.transform = 'translateY(0)';
+            card.style.boxShadow = 'none';
+        });
+    });
 }
 
+// Add CSS for the View in Context indicator hover
+if (!document.getElementById('codeAnalysisStyles')) {
+    const style = document.createElement('style');
+    style.id = 'codeAnalysisStyles';
+    style.textContent = `
+            .analysis-segment-card:hover { border-color: #cbd5e1 !important; box-shadow: 0 4px 12px rgba(0,0,0,0.05); transform: translateY(-2px); }
+            .analysis-segment-card:hover .go-indicator { opacity: 1 !important; transform: translateX(0) !important; }
+        `;
+    document.head.appendChild(style);
+}
+
+
 async function jumpToSegment(interviewId, segmentId) {
-    codeManagerModal.classList.add('hidden');
+    document.getElementById('analysisView').classList.add('hidden');
     if (currentInterviewId === interviewId && !transcriptReviewView.classList.contains('hidden')) {
         scrollToAndHighlight(segmentId);
         return;
@@ -5911,92 +5984,7 @@ window.confirmDeleteCode = function (codeId) {
     openConfirmModal('Delete Code', 'Are you sure?', 'Delete', () => performDeleteCode(codeId));
 };
 
-window.editCode = function (codeId) {
-    const modal = document.getElementById('codeModal');
-    const nameInput = document.getElementById('codeName');
-    const title = document.getElementById('codeModalTitle');
-
-    let name = "";
-    let color = "";
-    const item = document.getElementById(`manager-code-item-${codeId}`);
-    if (item) {
-        name = item.dataset.codeName;
-        color = item.dataset.codeColor;
-    } else {
-        const dTitle = document.getElementById('codeDetailTitle');
-        const dContent = document.getElementById('codeManagerDetailContent');
-        if (dTitle) name = dTitle.textContent;
-        if (dContent) color = dContent.dataset.currentCodeColor;
-    }
-
-    if (title) title.textContent = "Edit Code";
-    if (nameInput) nameInput.value = name;
-
-    // Select color in UI
-    document.querySelectorAll('.color-option, .custom-color-wrapper').forEach(el => el.classList.remove('selected'));
-    let found = false;
-    document.querySelectorAll('.color-option').forEach(el => {
-        if (el.dataset.color.toLowerCase() === (color || '').toLowerCase()) {
-            el.classList.add('selected');
-            found = true;
-        }
-    });
-    if (!found && color) {
-        const cw = document.querySelector('.custom-color-wrapper');
-        const ci = document.getElementById('customColorInput');
-        const cb = document.getElementById('customColorBubble');
-        if (cw && ci && cb) {
-            cw.classList.add('selected');
-            ci.value = color;
-            cb.style.background = color;
-        }
-    }
-
-    modal.dataset.editingId = codeId;
-    modal.classList.remove('hidden');
-
-    let saveBtn = document.getElementById('saveCodeBtn');
-
-    // Clone button to remove any existing event listeners (fix for "No code data" error)
-    const newSaveBtn = saveBtn.cloneNode(true);
-    saveBtn.parentNode.replaceChild(newSaveBtn, saveBtn);
-    saveBtn = newSaveBtn;
-
-    saveBtn.onclick = async (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-
-        const active = document.querySelector('.color-option.selected') || document.querySelector('.custom-color-wrapper.selected');
-        const c = active?.classList.contains('custom-color-wrapper') ? document.getElementById('customColorInput').value : active?.dataset.color;
-        const n = nameInput.value.trim();
-        if (!n) return;
-
-        saveBtn.disabled = true;
-        saveBtn.textContent = 'Updating...';
-        try {
-            await window.updateCodeInFirestore(currentProjectId, codeId, { name: n, color: c || '#3b82f6' });
-            showToast('Code updated');
-            modal.classList.add('hidden');
-
-            // 1. Refresh global project code list (Dashboard/Sidebar)
-            await renderCodesList(currentProjectId);
-
-            // 2. Refresh review mode sidebar if active
-            if (typeof loadCodesForReview === 'function' && !document.getElementById('transcriptReviewView').classList.contains('hidden')) {
-                await loadCodesForReview();
-            }
-
-            // 3. Re-open Manager to show updated detail
-            openCodeManager(currentProjectId, codeId, true);
-        } catch (err) {
-            console.error(err);
-            showToast('Update failed', 'error');
-        } finally {
-            saveBtn.disabled = false;
-            saveBtn.textContent = 'Save code';
-        }
-    };
-};
+// Old editCode function removed.
 
 async function performDeleteCode(codeId) {
     try {
@@ -6011,23 +5999,13 @@ async function performDeleteCode(codeId) {
             await loadCodesForReview();
         }
 
-        // 3. Close Code Manager and scroll to codes list
-        document.getElementById('codeManagerModal').classList.add('hidden');
-        setTimeout(() => {
-            const section = document.getElementById('section-codes');
-            if (section) section.scrollIntoView({ behavior: 'smooth' });
-        }, 100);
+        // 3. Refresh Analysis Page if active
+        if (!document.getElementById('analysisView').classList.contains('hidden')) {
+            openAnalysisPage(currentProjectId);
+        }
+
     } catch (e) {
         console.error(e);
         showToast('Delete failed', 'error');
     }
-}
-
-if (closeCodeManagerModal) {
-    closeCodeManagerModal.onclick = () => codeManagerModal.classList.add('hidden');
-}
-
-const managerBackButton = document.getElementById('managerBackButton');
-if (managerBackButton) {
-    managerBackButton.onclick = () => openCodeManager(currentProjectId);
 }
