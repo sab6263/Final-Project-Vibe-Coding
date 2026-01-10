@@ -691,11 +691,11 @@ body.fullscreen-active #interviewDetailView {
 }
 
 .modal-body {
-    padding: 2rem;
+    padding: 1.25rem;
 }
 
 .input-group {
-    margin-bottom: 1.5rem;
+    margin-bottom: 1rem;
 }
 
 .input-group label {
@@ -709,7 +709,7 @@ body.fullscreen-active #interviewDetailView {
 .input-group input,
 .input-group select {
     width: 100%;
-    padding: 1rem;
+    padding: 0.75rem;
     border: 2px solid rgba(0, 0, 0, 0.1);
     border-radius: var(--radius-md);
     font-size: 1.1rem;
@@ -734,7 +734,7 @@ body.fullscreen-active #interviewDetailView {
 .modal-footer {
     background: rgba(241, 245, 249, 0.5);
     /* Very light gray, glassy */
-    padding: 1.5rem 2rem;
+    padding: 1rem 1.5rem;
     display: flex;
     justify-content: flex-end;
     gap: 1rem;
@@ -1891,14 +1891,14 @@ input:checked+.slider:before {
 .color-picker-grid {
     display: flex;
     flex-wrap: wrap;
-    gap: 0.625rem;
+    gap: 0.4rem;
     align-items: center;
     padding: 0.25rem 0;
 }
 
 .color-option {
-    width: 40px;
-    height: 40px;
+    width: 32px;
+    height: 32px;
     border-radius: 50%;
     border: 2px solid transparent;
     cursor: pointer;
@@ -1919,15 +1919,15 @@ input:checked+.slider:before {
 /* Custom color picker wrapper */
 .custom-color-wrapper {
     position: relative;
-    width: 40px;
-    height: 40px;
+    width: 32px;
+    height: 32px;
     cursor: pointer;
 }
 
 /* Color picker bubble with icon */
 .color-picker-bubble {
-    width: 40px;
-    height: 40px;
+    width: 32px;
+    height: 32px;
     border-radius: 50%;
     border: 2px solid transparent;
     transition: all 0.15s ease;
