@@ -5934,9 +5934,17 @@ window.editCode = function (codeId) {
     modal.dataset.editingId = codeId;
     modal.classList.remove('hidden');
 
-    const saveBtn = document.getElementById('saveCodeBtn');
+    let saveBtn = document.getElementById('saveCodeBtn');
+
+    // Clone button to remove any existing event listeners (fix for "No code data" error)
+    const newSaveBtn = saveBtn.cloneNode(true);
+    saveBtn.parentNode.replaceChild(newSaveBtn, saveBtn);
+    saveBtn = newSaveBtn;
+
     saveBtn.onclick = async (e) => {
         e.preventDefault();
+        e.stopPropagation();
+
         const active = document.querySelector('.color-option.selected') || document.querySelector('.custom-color-wrapper.selected');
         const c = active?.classList.contains('custom-color-wrapper') ? document.getElementById('customColorInput').value : active?.dataset.color;
         const n = nameInput.value.trim();
@@ -5948,6 +5956,16 @@ window.editCode = function (codeId) {
             await window.updateCodeInFirestore(currentProjectId, codeId, { name: n, color: c || '#3b82f6' });
             showToast('Code updated');
             modal.classList.add('hidden');
+
+            // 1. Refresh global project code list (Dashboard/Sidebar)
+            await renderCodesList(currentProjectId);
+
+            // 2. Refresh review mode sidebar if active
+            if (typeof loadCodesForReview === 'function' && !document.getElementById('transcriptReviewView').classList.contains('hidden')) {
+                await loadCodesForReview();
+            }
+
+            // 3. Re-open Manager to show updated detail
             openCodeManager(currentProjectId, codeId, true);
         } catch (err) {
             console.error(err);
