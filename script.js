@@ -5730,14 +5730,17 @@ function renderCodeManagerSidebar(codes, codeUsageMap) {
 }
 
 function renderCodeUsageDetail(codeId, name, color, startEl) {
+    // UI Selection State
     document.querySelectorAll('.code-manager-item').forEach(el => {
         el.style.background = 'transparent';
         el.style.borderColor = 'transparent';
+        el.classList.remove('active');
     });
 
     if (startEl) {
         startEl.style.background = 'white';
         startEl.style.borderColor = 'var(--brand-primary)';
+        startEl.classList.add('active');
     }
 
     const dataEl = document.getElementById(`data-${codeId}`);
@@ -5752,62 +5755,108 @@ function renderCodeUsageDetail(codeId, name, color, startEl) {
     detailContentElement.dataset.currentCodeColor = color;
     detailContentElement.dataset.currentCodeId = codeId;
 
+    // Header Design
+    // Header Design
     titleContainer.innerHTML = `
-        <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 1rem;">
-            <div style="display: flex; align-items: center; gap: 1rem;">
-                <div id="codeDetailColor" style="width: 32px; height: 32px; border-radius: 50%; background: ${color}; flex-shrink: 0;"></div>
-                <h3 id="codeDetailTitle" style="margin: 0; font-size: 1.75rem; font-weight: 700; line-height: 1.2;">${escapeHtml(name)}</h3>
+        <div style="display: flex; flex-direction: column; gap: 0.5rem; margin-bottom: 2rem; width: 100%;">
+            <div style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
+                <div style="display: flex; align-items: center; gap: 0.75rem; flex: 1;">
+                    <div style="width: 18px; height: 18px; border-radius: 50%; background: ${color}; flex-shrink: 0;"></div>
+                    <h3 style="margin: 0; font-size: 1.85rem; font-weight: 800; color: var(--text-title); letter-spacing: -0.02em; line-height: 1.2;">
+                        ${escapeHtml(name)}
+                    </h3>
+                </div>
+                <div style="display: flex; gap: 0.65rem; margin-left: auto;">
+                    <button onclick="window.editCode('${codeId}')" class="btn-secondary small" style="border-radius: 8px; padding: 0.5rem 1rem;">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right: 6px;"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
+                        Edit
+                    </button>
+                    <button onclick="window.confirmDeleteCode('${codeId}')" class="btn-secondary small" style="border-radius: 8px; padding: 0.5rem 1rem; color: #ef4444; border-color: #fee2e2; background: #fff1f2;">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right: 6px;"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2-2v2"></path></svg>
+                        Delete
+                    </button>
+                </div>
             </div>
-            <div style="display: flex; gap: 0.5rem; flex-shrink: 0;">
-                <button onclick="window.editCode('${codeId}')" class="btn-secondary small" title="Edit Code">
-                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
-                        <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
-                    </svg>
-                    Edit
-                </button>
-                <button onclick="window.confirmDeleteCode('${codeId}')" class="btn-secondary small" style="color: #ef4444; border-color: #fee2e2; background: #fff1f2;" title="Delete Code">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <polyline points="3 6 5 6 21 6"></polyline>
-                        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2-2v2"></path>
-                    </svg>
-                    Delete
-                </button>
+            
+            <div style="display: flex; align-items: center; gap: 0.75rem; padding-left: calc(18px + 0.75rem);">
+                <span class="badge" style="background: ${color}15; color: ${color}; border: 1px solid ${color}30; font-weight: 600;">${occurrences.length} instances</span>
+                <span style="width: 4px; height: 4px; background: #cbd5e1; border-radius: 50%;"></span>
+                <span style="color: var(--text-muted); font-size: 0.85rem;">Used across ${new Set(occurrences.map(o => o.interviewId)).size} transcripts</span>
             </div>
         </div>
-        <div style="display: flex; align-items: center; gap: 1rem; color: var(--text-muted); font-size: 0.9rem;">
-            <span id="codeDetailCount" class="badge" style="font-size: 0.85rem; padding: 0.25rem 0.75rem;">${occurrences.length} segments</span>
-            <span style="width: 4px; height: 4px; background: #cbd5e1; border-radius: 50%;"></span>
-            <p id="codeDetailDesc" style="margin: 0;">
-                ${occurrences.length > 0 ? `Used in ${new Set(occurrences.map(o => o.interviewId)).size} interviews` : 'Not used yet.'}
-            </p>
-        </div>`;
+    `;
 
+    // Grouping Logic
     const container = document.getElementById('codeSegmentsList');
     if (occurrences.length === 0) {
-        container.innerHTML = '<div style="color:var(--text-muted); font-style:italic; padding: 2rem; text-align: center;">No coded segments found.</div>';
+        container.innerHTML = `
+            <div style="text-align: center; padding: 4rem 2rem; background: #f8fafc; border: 2px dashed #e2e8f0; border-radius: 12px; color: var(--text-muted);">
+                <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="margin-bottom: 1rem; opacity: 0.5;"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
+                <p style="margin: 0; font-weight: 500;">No coded segments found for this code.</p>
+                <p style="margin: 0.5rem 0 0; font-size: 0.85rem;">Start coding in transcript review to see analysis here.</p>
+            </div>
+        `;
         return;
     }
 
-    container.innerHTML = occurrences.map(occ => {
+    // Group by interview
+    const grouped = occurrences.reduce((acc, occ) => {
+        const id = occ.interviewId || 'unknown';
+        if (!acc[id]) acc[id] = { title: occ.interviewTitle || 'Untitled Interview', segments: [] };
+        acc[id].segments.push(occ);
+        return acc;
+    }, {});
+
+    container.innerHTML = Object.entries(grouped).map(([intId, data]) => `
+        <div class="interview-group" style="margin-bottom: 2rem;">
+            <div style="display: flex; align-items: center; gap: 0.75rem; margin-bottom: 1rem; padding: 0.5rem 0; border-bottom: 1px solid #f1f5f9;">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="color: var(--text-muted);"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
+                <h4 style="margin: 0; font-size: 0.9rem; font-weight: 700; color: var(--text-title); text-transform: uppercase; letter-spacing: 0.05em;">${escapeHtml(data.title)}</h4>
+                <span style="font-size: 0.75rem; color: var(--text-muted); font-weight: 500; background: #f1f5f9; padding: 2px 8px; border-radius: 12px; margin-left: auto;">${data.segments.length} instance${data.segments.length === 1 ? '' : 's'}</span>
+            </div>
+            
+            <div style="display: flex; flex-direction: column; gap: 0.75rem;">
+                ${data.segments.map(occ => {
         let speaker = occ.segmentSpeaker || 'Speaker';
         if (speaker.toLowerCase() === 'interviewer') speaker = 'Interviewer';
         else if (speaker.toLowerCase() === 'participant') speaker = 'Participant';
+
         return `
-            <div class="segment-card" style="background: #f8fafc; border: 1px solid var(--border-light); border-radius: 8px; padding: 1rem; margin-bottom: 1rem;">
-                <div style="display: flex; justify-content: space-between; margin-bottom: 0.5rem; font-size: 0.85rem; color: var(--text-muted);">
-                    <span style="font-weight: 600; color: var(--text-title);">${occ.interviewTitle || 'Unknown Interview'}</span>
-                    <span style="font-weight: 500;">${speaker}</span>
-                </div>
-                <div style="font-size: 0.95rem; line-height: 1.5; color: var(--text-body); margin-bottom: 1rem; border-left: 3px solid ${color}; padding-left: 0.75rem;">
-                    "${escapeHtml(occ.segmentText)}"
-                </div>
-                <button onclick="window.jumpToSegment('${occ.interviewId}', '${occ.segmentId}')" 
-                        class="btn-secondary small" style="width: 100%; justify-content: center;">
-                    Go to context
-                </button>
-            </div>`;
-    }).join('');
+                        <div class="segment-card" onclick="window.jumpToSegment('${occ.interviewId}', '${occ.segmentId}')"
+                             style="background: white; border: 1px solid #e2e8f0; border-radius: 10px; padding: 1.25rem; transition: all 0.2s; cursor: pointer; position: relative; overflow: hidden; display: flex; flex-direction: column; gap: 0.75rem;">
+                            
+                            <!-- Accent line -->
+                            <div style="position: absolute; left: 0; top: 0; bottom: 0; width: 4px; background: ${color};"></div>
+
+                            <div style="display: flex; justify-content: space-between; align-items: center;">
+                                <span style="font-size: 0.75rem; font-weight: 700; color: ${speaker === 'Interviewer' ? '#64748b' : '#3b82f6'}; text-transform: uppercase;">${speaker}</span>
+                                <div class="go-indicator" style="color: var(--text-muted); display: flex; align-items: center; gap: 0.25rem; font-size: 0.75rem; font-weight: 600; opacity: 0; transform: translateX(-5px); transition: all 0.2s;">
+                                    View in Context
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+                                </div>
+                            </div>
+
+                            <div style="font-size: 1rem; line-height: 1.6; color: var(--text-body); font-style: italic;">
+                                "${escapeHtml(occ.segmentText)}"
+                            </div>
+                        </div>
+                    `;
+    }).join('')}
+            </div>
+        </div>
+    `).join('');
+
+    // Add CSS for the View in Context indicator hover
+    if (!document.getElementById('codeManagerStyles')) {
+        const style = document.createElement('style');
+        style.id = 'codeManagerStyles';
+        style.textContent = `
+            .segment-card:hover { border-color: #cbd5e1 !important; box-shadow: 0 4px 12px rgba(0,0,0,0.05); transform: translateY(-2px); }
+            .segment-card:hover .go-indicator { opacity: 1 !important; transform: translateX(0) !important; }
+            .interview-group:last-child { margin-bottom: 0 !important; }
+        `;
+        document.head.appendChild(style);
+    }
 }
 
 async function jumpToSegment(interviewId, segmentId) {
