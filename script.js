@@ -635,7 +635,7 @@ function renderFilteredCodes() {
 
     list.className = 'list-container';
     list.innerHTML = filteredCodes.map(code => `
-        <div id="code-item-${code.id}" class="code-item" data-code-id="${code.id}" data-code-name="${escapeHtml(code.name || '')}" data-code-color="${code.color}" onclick="openCodeManager('${currentProjectId}', '${code.id}')" style="cursor: pointer;">
+        <div id="code-item-${code.id}" class="code-item" data-code-id="${code.id}" data-code-name="${escapeHtml(code.name || '')}" data-code-color="${code.color}" onclick="openCodeManager('${currentProjectId}', '${code.id}', true)" style="cursor: pointer;">
             <div class="code-item-left">
                 <div class="code-color-preview" style="background: ${code.color};"></div>
                 <div class="code-item-info">
@@ -3607,7 +3607,8 @@ function renderReviewCodesSidebar() {
     codesList.innerHTML = currentReviewCodes.map(code => `
         <div class="review-code-badge" 
              draggable="true"
-             style="display: flex; align-items: center; gap: 0.65rem; padding: 0.65rem 0.85rem; background: white; border: 1px solid #e2e8f0; border-radius: 8px; cursor: grab; transition: all 0.2s; border-left: 3px solid ${code.color};" 
+             onclick="window.openCodeManager('${currentProjectId}', '${code.id}', true)"
+             style="display: flex; align-items: center; gap: 0.65rem; padding: 0.65rem 0.85rem; background: white; border: 1px solid #e2e8f0; border-radius: 8px; cursor: pointer; transition: all 0.2s; border-left: 3px solid ${code.color};" 
              data-code-id="${code.id}"
              data-code-name="${escapeHtml(code.name)}"
              data-code-color="${code.color}">
@@ -3850,7 +3851,7 @@ function handleDragOver(event) {
         try {
             const data = JSON.parse(event.dataTransfer.getData('application/json'));
             if (data && data.codeColor) {
-                targetHighlight.style.borderBottom = `3px solid ${data.codeColor}`;
+                targetHighlight.style.borderBottom = `3px solid ${data.codeColor} `;
             }
         } catch (e) {
             // Fallback
@@ -3954,11 +3955,11 @@ async function handleCodeDrop(event) {
         deleteBtn.innerHTML = '&times;';
         deleteBtn.title = 'Remove code';
         deleteBtn.style.cssText = `
-            margin-left: 6px;
-            cursor: pointer;
-            opacity: 0.7;
-            font-weight: 700;
-        `;
+    margin - left: 6px;
+    cursor: pointer;
+    opacity: 0.7;
+    font - weight: 700;
+    `;
         deleteBtn.onclick = (e) => {
             e.preventDefault();
             e.stopPropagation();
@@ -4164,18 +4165,18 @@ function findAndHighlightText(rootNode, text, assignment) {
                 const codeTag = document.createElement('span');
                 codeTag.className = 'code-tag';
                 codeTag.style.cssText = `
-                    display: inline-block;
-                    margin-left: 6px;
-                    margin-right: 6px;
-                    padding: 2px 8px;
-                    font-size: 0.7rem;
-                    font-weight: 600;
-                    color: white;
-                    background: ${color};
-                    border-radius: 4px;
-                    vertical-align: baseline;
-                    white-space: nowrap;
-                `;
+    display: inline - block;
+    margin - left: 6px;
+    margin - right: 6px;
+    padding: 2px 8px;
+    font - size: 0.7rem;
+    font - weight: 600;
+    color: white;
+    background: ${color};
+    border - radius: 4px;
+    vertical - align: baseline;
+    white - space: nowrap;
+    `;
 
                 const tagName = document.createElement('span');
                 tagName.textContent = codeName;
@@ -4186,11 +4187,11 @@ function findAndHighlightText(rootNode, text, assignment) {
                 deleteBtn.innerHTML = '&times;';
                 deleteBtn.title = 'Remove code';
                 deleteBtn.style.cssText = `
-                    margin-left: 6px;
-                    cursor: pointer;
-                    opacity: 0.7;
-                    font-weight: 700;
-                `;
+    margin - left: 6px;
+    cursor: pointer;
+    opacity: 0.7;
+    font - weight: 700;
+    `;
                 deleteBtn.onclick = (e) => {
                     e.preventDefault();
                     e.stopPropagation();
@@ -4437,14 +4438,14 @@ async function downloadTranscriptAsPDF() {
         });
 
         const headerHtml = `
-            <div style="font-family: Inter, sans-serif; padding-bottom: 20px; border-bottom: 2px solid #eee; margin-bottom: 30px;">
+        < div style = "font-family: Inter, sans-serif; padding-bottom: 20px; border-bottom: 2px solid #eee; margin-bottom: 30px;" >
                 <h1 style="color: #1a202c; margin: 0; font-size: 24px; margin-bottom: 10px;">${sessionTitle}</h1>
                 <div style="color: #4a5568; font-size: 14px; line-height: 1.6;">
                     <strong>Date:</strong> ${dateStr}<br>
                     <strong>Participant:</strong> ${sessionTitle}
                 </div>
                 <p style="color: #94a3b8; margin: 10px 0 0 0; font-size: 12px;">Transcript Exported from Contexture</p>
-            </div>
+            </div >
         `;
 
         // Create a clone for the PDF to add the header without affecting the real UI
@@ -4472,7 +4473,7 @@ async function downloadTranscriptAsPDF() {
             if (noteText) {
                 // Create a visible span for the note
                 const noteSpan = document.createElement('span');
-                noteSpan.innerHTML = `<span style="background-color: #f1f5f9; color: #475569; padding: 2px 6px; border-radius: 4px; font-size: 0.75em; border: 1px solid #e2e8f0; display: inline-block; margin-left: 6px; vertical-align: middle; font-weight: 600;">📝 ${noteText}</span>`;
+                noteSpan.innerHTML = `< span style = "background-color: #f1f5f9; color: #475569; padding: 2px 6px; border-radius: 4px; font-size: 0.75em; border: 1px solid #e2e8f0; display: inline-block; margin-left: 6px; vertical-align: middle; font-weight: 600;" >📝 ${noteText}</span > `;
 
                 // Intelligent placement: Attempt to place note after the current word if inside one to avoid splitting words
                 let targetNode = highlight;
@@ -4748,13 +4749,13 @@ function initDragAndDrop() {
             dragImg.style.boxShadow = '0 10px 15px -3px rgba(0, 0, 0, 0.1)';
             dragImg.style.pointerEvents = 'none';
             dragImg.innerHTML = `
-                <div class="review-note-meta" style="margin-bottom: 0.5rem; opacity: 0.7;">
-                    <span style="font-size: 0.75rem; font-weight: 600; text-transform: uppercase;">Session Note (Placing...)</span>
-                </div>
-                <div style="font-size: 0.95rem; line-height: 1.5; color: var(--text-primary);">
-                    ${escapeHtml(content)}
-                </div>
-            `;
+        < div class="review-note-meta" style = "margin-bottom: 0.5rem; opacity: 0.7;" >
+            <span style="font-size: 0.75rem; font-weight: 600; text-transform: uppercase;">Session Note (Placing...)</span>
+                </div >
+        <div style="font-size: 0.95rem; line-height: 1.5; color: var(--text-primary);">
+            ${escapeHtml(content)}
+        </div>
+    `;
             document.body.appendChild(dragImg);
             e.dataTransfer.setDragImage(dragImg, 20, 20);
 
@@ -4965,8 +4966,8 @@ document.addEventListener('mouseup', (e) => {
 
                 // Show popdown - use fixed positioning relative to viewport
                 inlineNotePopdown.style.position = 'fixed';
-                inlineNotePopdown.style.top = `${rect.bottom + 10}px`;
-                inlineNotePopdown.style.left = `${rect.left}px`;
+                inlineNotePopdown.style.top = `${rect.bottom + 10} px`;
+                inlineNotePopdown.style.left = `${rect.left} px`;
                 inlineNotePopdown.classList.remove('hidden');
 
                 setTimeout(() => inlineNoteInput.focus(), 50);
@@ -5065,7 +5066,7 @@ function createReviewSegmentElement(segment) {
     // Speaker Label
     if (segment.speaker) {
         const speakerLabel = document.createElement('div'); // Block element
-        speakerLabel.className = `speaker-label ${segment.speaker}`;
+        speakerLabel.className = `speaker - label ${segment.speaker} `;
         speakerLabel.style.display = 'inline-block'; // Keep badge look
         speakerLabel.style.whiteSpace = 'nowrap'; // Prevent wrapping (User request: "no umbruch")
         speakerLabel.style.marginBottom = '0';
@@ -5140,7 +5141,7 @@ function createReviewSegmentElement(segment) {
             const chunk = text.substring(h.start, h.end);
             // Ensure we use a unique ID for easier DOM manipulation later if needed
             // But strict start-offset reliance is okay if we keep text sync'd.
-            html += `<mark class="word-highlight" data-segment-id="${segment.id}" data-highlight-start="${h.start}" data-note="${escapeHtml(h.note || '')}">${escapeHtml(chunk)}</mark>`;
+            html += `< mark class="word-highlight" data - segment - id="${segment.id}" data - highlight - start="${h.start}" data - note="${escapeHtml(h.note || '')}" > ${escapeHtml(chunk)}</mark > `;
             lastIndex = h.end;
         });
         if (lastIndex < text.length) {
@@ -5255,7 +5256,7 @@ function createReviewSegmentElement(segment) {
 
                     // Focus the new segment
                     setTimeout(() => {
-                        const newEl = document.querySelector(`[data-segment-id="${newSegment.id}"] span[contenteditable="true"]`);
+                        const newEl = document.querySelector(`[data - segment - id="${newSegment.id}"]span[contenteditable = "true"]`);
                         if (newEl) {
                             newEl.focus();
                             const newRange = document.createRange();
@@ -5320,7 +5321,7 @@ function createReviewSegmentElement(segment) {
 
                             // Focus at the merge point
                             setTimeout(() => {
-                                const prevElSpan = document.querySelector(`[data-segment-id="${prevId}"] span[contenteditable="true"]`);
+                                const prevElSpan = document.querySelector(`[data - segment - id= "${prevId}"]span[contenteditable = "true"]`);
                                 if (prevElSpan) {
                                     prevElSpan.focus();
                                     const newRange = document.createRange();
@@ -5615,9 +5616,7 @@ const openCodeManagerBtn = document.getElementById('openCodeManagerBtn');
 
 if (openCodeManagerBtn) {
     openCodeManagerBtn.addEventListener('click', () => {
-        if (currentProjectId) {
-            openCodeManager(currentProjectId);
-        }
+        if (currentProjectId) openCodeManager(currentProjectId);
     });
 }
 
@@ -5627,15 +5626,36 @@ if (closeCodeManagerModal) {
     });
 }
 
-// Make globally accessible for the onclick handlers in HTML string
+// Make globally accessible
 window.renderCodeUsageDetail = renderCodeUsageDetail;
 window.jumpToSegment = jumpToSegment;
 
 /**
  * Open Code Manager and Load Data
  */
-async function openCodeManager(projectId) {
-    codeManagerModal.classList.remove('hidden');
+async function openCodeManager(projectId, initialCodeId = null, isFocused = false) {
+    const modal = document.getElementById('codeManagerModal');
+    const sidebar = modal.querySelector('.code-manager-sidebar');
+    const modalBody = modal.querySelector('.modal-body');
+    const modalTitle = modal.querySelector('.modal-header h2');
+    const backBtn = document.getElementById('managerBackButton');
+
+    if (!modal) return;
+    modal.classList.remove('hidden');
+
+    // Toggle Focus Mode
+    if (isFocused && initialCodeId) {
+        if (sidebar) sidebar.style.display = 'none';
+        if (modalBody) modalBody.style.gridTemplateColumns = '1fr';
+        if (modalTitle) modalTitle.textContent = 'Code Usage Detail';
+        if (backBtn) backBtn.classList.remove('hidden');
+    } else {
+        if (sidebar) sidebar.style.display = 'block';
+        if (modalBody) modalBody.style.gridTemplateColumns = '300px 1fr';
+        if (modalTitle) modalTitle.textContent = 'Code Manager & Analysis';
+        if (backBtn) backBtn.classList.add('hidden');
+    }
+
     const listContainer = document.getElementById('codeManagerList');
     listContainer.innerHTML = '<div style="text-align: center; padding: 2rem; color: var(--text-muted);">Loading code analysis...</div>';
 
@@ -5644,35 +5664,37 @@ async function openCodeManager(projectId) {
     document.getElementById('codeManagerDetailContent').classList.add('hidden');
 
     try {
-        // 1. Fetch Codes and All Project Segments in parallel
         const [codes, allSegments] = await Promise.all([
             window.loadCodesForProject(projectId),
             window.getAllCodedSegments(projectId)
         ]);
 
-        // 2. Aggregate Usage Counts
         const codeUsageMap = {};
         allSegments.forEach(seg => {
-            if (!codeUsageMap[seg.codeId]) {
-                codeUsageMap[seg.codeId] = [];
-            }
+            if (!codeUsageMap[seg.codeId]) codeUsageMap[seg.codeId] = [];
             codeUsageMap[seg.codeId].push(seg);
         });
 
-        // 3. Render Code List (Left Sidebar)
         renderCodeManagerSidebar(codes, codeUsageMap);
 
+        if (initialCodeId) {
+            const code = codes.find(c => c.id === initialCodeId);
+            if (code) {
+                const startEl = document.getElementById(`manager-code-item-${code.id}`);
+                renderCodeUsageDetail(code.id, code.name, code.color, startEl);
+            }
+        }
     } catch (error) {
         console.error("Error loading code manager:", error);
-        listContainer.innerHTML = '<div style="color: red; padding: 1rem;">Error loading data.</div>';
+        if (listContainer) listContainer.innerHTML = '<div style="color: red; padding: 1rem;">Error loading data.</div>';
     }
 }
 
-/**
- * Render Sidebar List
- */
+window.openCodeManager = openCodeManager;
+
 function renderCodeManagerSidebar(codes, codeUsageMap) {
     const listContainer = document.getElementById('codeManagerList');
+    if (!listContainer) return;
 
     if (!codes || codes.length === 0) {
         listContainer.innerHTML = '<div style="padding: 1rem; color: var(--text-muted);">No codes created yet.</div>';
@@ -5681,24 +5703,19 @@ function renderCodeManagerSidebar(codes, codeUsageMap) {
 
     listContainer.innerHTML = codes.map(code => {
         const usage = codeUsageMap[code.id] || [];
-        const count = usage.length;
-
-        // Escape data for attribute
         const usageData = JSON.stringify(usage).replace(/"/g, '&quot;');
 
         return `
             <div class="code-manager-item code-item" 
-                 id="code-item-${code.id}"
+                 id="manager-code-item-${code.id}"
                  data-code-name="${escapeHtml(code.name)}"
                  data-code-color="${code.color}"
                  onclick="window.renderCodeUsageDetail('${code.id}', '${escapeHtml(code.name)}', '${code.color}', this)"
-                 style="/* style managed by css now mostly, but keep minimal */">
-                
+                 style="position: relative;">
                 <div class="code-item-left">
                     <div class="code-color-preview" style="background: ${code.color};"></div>
-                    <span class="code-item-name" style="/* managed by css */">${escapeHtml(code.name)}</span>
+                    <span class="code-item-name">${escapeHtml(code.name)}</span>
                 </div>
-
                 <div class="code-item-actions">
                      <button onclick="event.stopPropagation(); window.editCode('${code.id}')" title="Edit">
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
@@ -5707,44 +5724,34 @@ function renderCodeManagerSidebar(codes, codeUsageMap) {
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
                      </button>
                 </div>
-
-                <!-- Hidden data storage -->
                 <div id="data-${code.id}" style="display:none;" data-usage="${usageData}"></div>
-            </div>
-        `;
+            </div>`;
     }).join('');
 }
 
-/**
- * Render Right Content (Occurrences)
- */
 function renderCodeUsageDetail(codeId, name, color, startEl) {
-    // UI Selection State
     document.querySelectorAll('.code-manager-item').forEach(el => {
         el.style.background = 'transparent';
         el.style.borderColor = 'transparent';
     });
-    startEl.style.background = 'white';
-    startEl.style.borderColor = 'var(--brand-primary)';
 
-    // Get Data
+    if (startEl) {
+        startEl.style.background = 'white';
+        startEl.style.borderColor = 'var(--brand-primary)';
+    }
+
     const dataEl = document.getElementById(`data-${codeId}`);
+    if (!dataEl) return;
     const occurrences = JSON.parse(dataEl.dataset.usage || '[]');
 
-    // Update Header
     document.getElementById('codeManagerDetailEmpty').classList.add('hidden');
     document.getElementById('codeManagerDetailContent').classList.remove('hidden');
 
-    // Update title area with controls
     const titleContainer = document.querySelector('#codeManagerDetailContent .detail-header');
-
-    // Store current raw color AND ID for edit modal retrieval
     const detailContentElement = document.getElementById('codeManagerDetailContent');
     detailContentElement.dataset.currentCodeColor = color;
     detailContentElement.dataset.currentCodeId = codeId;
 
-    // Clear existing content relative to header actions if any (we are rewriting innerHTML of container or just parts)
-    // Actually, let's just rewrite the header content to include buttons
     titleContainer.innerHTML = `
         <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 1rem;">
             <div style="display: flex; align-items: center; gap: 1rem;">
@@ -5768,248 +5775,134 @@ function renderCodeUsageDetail(codeId, name, color, startEl) {
                 </button>
             </div>
         </div>
-        
         <div style="display: flex; align-items: center; gap: 1rem; color: var(--text-muted); font-size: 0.9rem;">
             <span id="codeDetailCount" class="badge" style="font-size: 0.85rem; padding: 0.25rem 0.75rem;">${occurrences.length} segments</span>
             <span style="width: 4px; height: 4px; background: #cbd5e1; border-radius: 50%;"></span>
             <p id="codeDetailDesc" style="margin: 0;">
-                ${occurrences.length > 0
-            ? `Used in ${new Set(occurrences.map(o => o.interviewId)).size} interviews (Total: ${occurrences.length} times)`
-            : 'This code has not been used in any transcript yet.'}
+                ${occurrences.length > 0 ? `Used in ${new Set(occurrences.map(o => o.interviewId)).size} interviews` : 'Not used yet.'}
             </p>
-        </div>
-    `;
+        </div>`;
 
-    // Render List
     const container = document.getElementById('codeSegmentsList');
     if (occurrences.length === 0) {
-        container.innerHTML = '<div style="color:var(--text-muted); font-style:italic;">No coded segments found.</div>';
+        container.innerHTML = '<div style="color:var(--text-muted); font-style:italic; padding: 2rem; text-align: center;">No coded segments found.</div>';
         return;
     }
 
     container.innerHTML = occurrences.map(occ => {
-        // Capitalize Speaker
         let speaker = occ.segmentSpeaker || 'Speaker';
-        if (speaker.toLowerCase() === 'interviewer') {
-            speaker = 'Interviewer';
-        } else if (speaker.toLowerCase() === 'participant') {
-            speaker = 'Participant';
-        }
-
+        if (speaker.toLowerCase() === 'interviewer') speaker = 'Interviewer';
+        else if (speaker.toLowerCase() === 'participant') speaker = 'Participant';
         return `
-        <div class="segment-card" style="background: #f8fafc; border: 1px solid var(--border-light); border-radius: 8px; padding: 1rem; transition: all 0.2s;">
-            <div style="display: flex; justify-content: space-between; margin-bottom: 0.5rem; font-size: 0.85rem; color: var(--text-muted);">
-                <span style="font-weight: 600; color: var(--text-title);">
-                    ${occ.interviewTitle || 'Unknown Interview'}
-                </span>
-                <span style="font-weight: 500;">${speaker}</span>
-            </div>
-            <div style="font-size: 0.95rem; line-height: 1.5; color: var(--text-body); margin-bottom: 1rem; border-left: 3px solid ${color}; padding-left: 0.75rem;">
-                "${escapeHtml(occ.segmentText)}"
-            </div>
-            <button onclick="window.jumpToSegment('${occ.interviewId}', '${occ.segmentId}')" 
-                    class="btn-secondary small" style="width: 100%; justify-content: center;">
-                Go to Transcript context
-            </button>
-        </div>
-    `}).join('');
+            <div class="segment-card" style="background: #f8fafc; border: 1px solid var(--border-light); border-radius: 8px; padding: 1rem; margin-bottom: 1rem;">
+                <div style="display: flex; justify-content: space-between; margin-bottom: 0.5rem; font-size: 0.85rem; color: var(--text-muted);">
+                    <span style="font-weight: 600; color: var(--text-title);">${occ.interviewTitle || 'Unknown Interview'}</span>
+                    <span style="font-weight: 500;">${speaker}</span>
+                </div>
+                <div style="font-size: 0.95rem; line-height: 1.5; color: var(--text-body); margin-bottom: 1rem; border-left: 3px solid ${color}; padding-left: 0.75rem;">
+                    "${escapeHtml(occ.segmentText)}"
+                </div>
+                <button onclick="window.jumpToSegment('${occ.interviewId}', '${occ.segmentId}')" 
+                        class="btn-secondary small" style="width: 100%; justify-content: center;">
+                    Go to context
+                </button>
+            </div>`;
+    }).join('');
 }
 
-/**
- * Jump to Segment Logic
- */
 async function jumpToSegment(interviewId, segmentId) {
-    // Close Modal
     codeManagerModal.classList.add('hidden');
-
-    // 1. If currently in the right interview, just scroll
     if (currentInterviewId === interviewId && !transcriptReviewView.classList.contains('hidden')) {
         scrollToAndHighlight(segmentId);
         return;
     }
-
-    // 2. Otherwise, load the interview first
-    // Use loadCompletedInterview to ensure we enter Review Mode where coding happens
     await loadCompletedInterview(interviewId);
-
-    // Switch to Coding Mode explicitly
-    // We do this after loadCompletedInterview because openReview resets it to Edit mode
     reviewEditMode = false;
     reviewNotesMode = false;
     reviewCodingMode = true;
     updateToolbarModes();
-    renderReview(); // Re-render to ensure coding styles are applied
+    renderReview();
     enableTextSelection();
-    showToast('Switched to Coding Mode', 'info');
-
-    // 3. Then scroll after a slight delay to ensure render
-    setTimeout(() => {
-        scrollToAndHighlight(segmentId);
-    }, 800);
+    setTimeout(() => scrollToAndHighlight(segmentId), 800);
 }
 
 function scrollToAndHighlight(segmentId) {
-    const segmentEl = document.getElementById(segmentId);
-    if (segmentEl) {
-        segmentEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        // Add temporary flash effect
-        segmentEl.style.transition = 'background 0.5s';
-        const originalBg = segmentEl.style.backgroundColor;
-        segmentEl.style.backgroundColor = '#fff7ed'; // Flash orange/yellow
-        setTimeout(() => {
-            segmentEl.style.backgroundColor = originalBg || 'transparent';
-        }, 2000);
-    } else {
-        showToast('Could not find segment in this transcript.', 'error');
+    const el = document.getElementById(segmentId);
+    if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        el.style.transition = 'background 0.5s';
+        const old = el.style.backgroundColor;
+        el.style.backgroundColor = '#fff7ed';
+        setTimeout(() => el.style.backgroundColor = old || 'transparent', 2000);
     }
 }
 
-// ============================================================================
-// CODE MANAGER ACTIONS (Edit / Delete)
-// ============================================================================
-
 window.confirmDeleteCode = function (codeId) {
-    openConfirmModal(
-        'Delete Code',
-        'Are you sure you want to delete this code? This will remove it from all assigned segments.',
-        'Delete',
-        () => performDeleteCode(codeId)
-    );
+    openConfirmModal('Delete Code', 'Are you sure?', 'Delete', () => performDeleteCode(codeId));
 };
 
-window.editCode = function (projectId, codeId) {
-    // Reuse the create code modal but populate it
+window.editCode = function (codeId) {
     const modal = document.getElementById('codeModal');
-    const title = document.getElementById('codeModalTitle');
     const nameInput = document.getElementById('codeName');
+    const title = document.getElementById('codeModalTitle');
 
-    // Strategy: Try to find the source data in the sidebar list first (most reliable)
-    // Then fall back to the detail view if that ID is currently open
-    // This solves the issue where edit args were stale or missing
-    let currentName = "";
-    let currentColor = "";
-
-    const listItem = document.getElementById(`code-item-${codeId}`);
-    if (listItem) {
-        currentName = listItem.dataset.codeName;
-        currentColor = listItem.dataset.codeColor;
+    let name = "";
+    let color = "";
+    const item = document.getElementById(`manager-code-item-${codeId}`);
+    if (item) {
+        name = item.dataset.codeName;
+        color = item.dataset.codeColor;
     } else {
-        // Fallback: Check if the detail view is open for this code
-        // If sidebar item is missing/hidden, and we are editing, we are likely in the detail view header.
-        // We trust the visible title matches the edit button context.
-        const detailTitle = document.getElementById('codeDetailTitle');
-        const detailContent = document.getElementById('codeManagerDetailContent');
-
-        if (detailTitle) {
-            currentName = detailTitle.textContent;
-        }
-        if (detailContent && detailContent.dataset.currentCodeColor) {
-            currentColor = detailContent.dataset.currentCodeColor;
-        }
+        const dTitle = document.getElementById('codeDetailTitle');
+        const dContent = document.getElementById('codeManagerDetailContent');
+        if (dTitle) name = dTitle.textContent;
+        if (dContent) color = dContent.dataset.currentCodeColor;
     }
 
-    // Default fallback
-    if (!currentColor) currentColor = '#3b82f6';
-
-    // Setup Modal
     if (title) title.textContent = "Edit Code";
-    if (nameInput) {
-        nameInput.value = currentName || '';
-    }
+    if (nameInput) nameInput.value = name;
 
-    // Pre-select Color
-    // 1. Reset all
-    document.querySelectorAll('.color-option').forEach(el => el.classList.remove('selected'));
-    document.querySelectorAll('.custom-color-wrapper').forEach(el => el.classList.remove('selected'));
-
-    // 2. Find match
-    let matchFound = false;
-    if (currentColor) {
-        // Normal Hex Match
-        const normalize = (c) => c.toLowerCase().trim();
-        const target = normalize(currentColor);
-
-        document.querySelectorAll('.color-option').forEach(el => {
-            if (normalize(el.dataset.color) === target) {
-                el.classList.add('selected');
-                matchFound = true;
-            }
-        });
-
-        // If no predefined match, assume custom
-        if (!matchFound) {
-            const customWrapper = document.querySelector('.custom-color-wrapper');
-            const customInput = document.getElementById('customColorInput');
-            const customBubble = document.getElementById('customColorBubble');
-
-            if (customWrapper && customInput && customBubble) {
-                customWrapper.classList.add('selected');
-                customInput.value = currentColor; // works for hex
-                customBubble.style.background = currentColor;
-
-                // If the color isn't hex (e.g. rgba), input type='color' might ignore it, 
-                // but style.background will work for the bubble.
-            }
+    // Select color in UI
+    document.querySelectorAll('.color-option, .custom-color-wrapper').forEach(el => el.classList.remove('selected'));
+    let found = false;
+    document.querySelectorAll('.color-option').forEach(el => {
+        if (el.dataset.color.toLowerCase() === (color || '').toLowerCase()) {
+            el.classList.add('selected');
+            found = true;
+        }
+    });
+    if (!found && color) {
+        const cw = document.querySelector('.custom-color-wrapper');
+        const ci = document.getElementById('customColorInput');
+        const cb = document.getElementById('customColorBubble');
+        if (cw && ci && cb) {
+            cw.classList.add('selected');
+            ci.value = color;
+            cb.style.background = color;
         }
     }
 
-    // Store editing ID
     modal.dataset.editingId = codeId;
-
     modal.classList.remove('hidden');
 
-    // Overwrite save handler temporarily
+    const saveBtn = document.getElementById('saveCodeBtn');
     saveBtn.onclick = async (e) => {
         e.preventDefault();
-        e.stopPropagation();
-
-        const newName = nameInput.value.trim();
-        const activeColorEl = document.querySelector('.color-option.selected') || document.querySelector('.custom-color-wrapper.selected');
-        let newColor = '#3b82f6';
-
-        if (activeColorEl) {
-            if (activeColorEl.classList.contains('custom-color-wrapper')) {
-                newColor = document.getElementById('customColorInput').value;
-            } else {
-                newColor = activeColorEl.dataset.color;
-            }
-        }
-
-        if (!newName) return;
+        const active = document.querySelector('.color-option.selected') || document.querySelector('.custom-color-wrapper.selected');
+        const c = active?.classList.contains('custom-color-wrapper') ? document.getElementById('customColorInput').value : active?.dataset.color;
+        const n = nameInput.value.trim();
+        if (!n) return;
 
         saveBtn.disabled = true;
         saveBtn.textContent = 'Updating...';
-
         try {
-            if (window.updateCode) {
-                await window.updateCode(codeId, { name: newName, color: newColor });
-            } else {
-                // Fallback
-                await db.collection('codes').doc(codeId).update({
-                    name: newName,
-                    color: newColor,
-                    updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-                });
-            }
-
+            await window.updateCodeInFirestore(currentProjectId, codeId, { name: n, color: c || '#3b82f6' });
             showToast('Code updated');
             modal.classList.add('hidden');
-            delete modal.dataset.editingId;
-
-
-            // Refresh
-            if (currentProjectId) openCodeManager(currentProjectId);
-
-            // Reset UI
-            if (title) title.textContent = "Create Code";
-            if (nameInput) nameInput.value = "";
-            saveBtn.onclick = null; // Remove this handler?
-            // Re-attach original handler?? This is messy. 
-            // Better to have one handler that checks mode.
-
-        } catch (e) {
-            console.error(e);
-            showToast('Error updating code', 'error');
+            openCodeManager(currentProjectId, codeId, true);
+        } catch (err) {
+            console.error(err);
+            showToast('Update failed', 'error');
         } finally {
             saveBtn.disabled = false;
             saveBtn.textContent = 'Save code';
@@ -6018,169 +5911,21 @@ window.editCode = function (projectId, codeId) {
 };
 
 async function performDeleteCode(codeId) {
-    if (!codeId) return;
-
     try {
-        await window.deleteCode(codeId); // Assumes this is exposed in firebase-data.js
+        await window.deleteCodeFromFirestore(currentProjectId, codeId);
         showToast('Code deleted');
-
-        // Refresh Code Manager
-        if (currentProjectId) {
-            openCodeManager(currentProjectId);
-        }
-    } catch (error) {
-        console.error('Error deleting code:', error);
-        showToast('Failed to delete code', 'error');
+        openCodeManager(currentProjectId);
+    } catch (e) {
+        console.error(e);
+        showToast('Delete failed', 'error');
     }
 }
-// ============================================================================
-// CODE MANAGER IMPLEMENTATION
-// ============================================================================
 
-window.openCodeManager = async function (projectId, initialCodeId = null) {
-    if (!projectId) return;
-
-    const modal = document.getElementById('codeManagerModal');
-    if (!modal) return;
-
-    modal.classList.remove('hidden');
-
-    // Reset UI
-    document.getElementById('managerDetailHeader').style.display = 'block';
-
-    // Load codes if not loaded
-    if (!currentProjectCodes || currentProjectCodes.length === 0) {
-        currentProjectCodes = await window.loadCodesForProject(projectId);
-    }
-
-    renderManagerSidebar(currentProjectCodes, initialCodeId);
-
-    if (initialCodeId) {
-        const code = currentProjectCodes.find(c => c.id === initialCodeId);
-        if (code) {
-            selectCodeInManager(projectId, code);
-        }
-    } else {
-        // Reset main view
-        document.getElementById('managerSelectedCodeName').textContent = 'Select a code';
-        document.getElementById('managerSelectedCodeMeta').textContent = 'No code selected';
-        document.getElementById('managerUsageList').innerHTML = '<div style="text-align: center; color: var(--text-muted); margin-top: 3rem;">Select a code to see its usage across interviews.</div>';
-    }
-
-    // Connect Search
-    const searchInput = document.getElementById('managerCodeSearch');
-    if (searchInput) {
-        searchInput.oninput = (e) => {
-            const query = e.target.value.toLowerCase();
-            const filtered = currentProjectCodes.filter(c => c.name.toLowerCase().includes(query));
-            renderManagerSidebar(filtered, initialCodeId);
-        };
-        searchInput.value = '';
-    }
-};
-
-function renderManagerSidebar(codes, activeCodeId) {
-    const list = document.getElementById('managerCodesList');
-    if (!list) return;
-
-    list.innerHTML = codes.map(code => `
-        <div onclick="selectCodeInManager('${currentProjectId}', {id: '${code.id}', name: '${escapeHtml(code.name || '')}', color: '${code.color}'})" 
-             style="padding: 0.75rem 1rem; cursor: pointer; display: flex; align-items: center; gap: 0.75rem; border-bottom: 1px solid #f1f5f9; background: ${code.id === activeCodeId ? '#fff7ed' : 'transparent'}; border-left: 3px solid ${code.id === activeCodeId ? '#ea580c' : 'transparent'}; transition: all 0.2s;">
-            <div style="width: 12px; height: 12px; border-radius: 50%; background: ${code.color}; flex-shrink: 0;"></div>
-            <span style="font-size: 0.9rem; font-weight: 500; color: var(--text-body);">${escapeHtml(code.name || 'Untitled')}</span>
-        </div>
-    `).join('');
+if (closeCodeManagerModal) {
+    closeCodeManagerModal.onclick = () => codeManagerModal.classList.add('hidden');
 }
 
-window.selectCodeInManager = async function (projectId, code) {
-    // Update sidebar active state
-    renderManagerSidebar(currentProjectCodes, code.id);
-
-    // Update Header
-    document.getElementById('managerSelectedCodeName').textContent = code.name;
-    document.getElementById('managerSelectedCodeMeta').innerHTML = `
-        <div style="display: flex; align-items: center; gap: 0.5rem;">
-            <div style="width: 10px; height: 10px; border-radius: 50%; background: ${code.color};"></div>
-            <span>Loading usage data...</span>
-        </div>
-    `;
-
-    const list = document.getElementById('managerUsageList');
-    list.innerHTML = '<div style="display: flex; justify-content: center; padding: 2rem;"><div class="spinner"></div></div>'; // Add spinner logic or text
-
-    try {
-        // Fetch all interviews
-        const interviews = await window.loadInterviewsForProject(projectId);
-
-        // Find usages
-        let totalUsages = 0;
-        let usagesByInterview = [];
-
-        for (const interview of interviews) {
-            const assignments = await window.loadCodeAssignments(interview.id);
-            const codeAssignments = assignments.filter(a => a.codeId === code.id);
-
-            if (codeAssignments.length > 0) {
-                totalUsages += codeAssignments.length;
-
-                // Get segment text for each assignment
-                // We need to load the interview content to get text? 
-                // Or is it stored in the assignment? 
-                // Creating assignment stores 'text'. (checked firebase-data.js)
-
-                usagesByInterview.push({
-                    interviewTitle: interview.title,
-                    interviewId: interview.id,
-                    assignments: codeAssignments
-                });
-            }
-        }
-
-        document.getElementById('managerSelectedCodeMeta').innerHTML = `
-            <div style="display: flex; align-items: center; gap: 0.5rem;">
-                <div style="width: 10px; height: 10px; border-radius: 50%; background: ${code.color};"></div>
-                <span>${totalUsages} occurrences across ${usagesByInterview.length} interviews</span>
-            </div>
-        `;
-
-        if (totalUsages === 0) {
-            list.innerHTML = '<div style="text-align: center; color: var(--text-muted); margin-top: 3rem;">This code has not been used yet.</div>';
-            return;
-        }
-
-        // Render Usages
-        list.innerHTML = usagesByInterview.map(group => `
-            <div style="margin-bottom: 2rem;">
-                <h4 style="font-size: 0.9rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase; margin-bottom: 1rem; border-bottom: 1px solid #e2e8f0; padding-bottom: 0.5rem;">
-                    ${escapeHtml(group.interviewTitle)} (${group.assignments.length})
-                </h4>
-                <div style="display: flex; flex-direction: column; gap: 1rem;">
-                    ${group.assignments.map(a => `
-                        <div style="background: white; border: 1px solid #e2e8f0; border-radius: 8px; padding: 1rem; box-shadow: 0 1px 2px rgba(0,0,0,0.05);">
-                            <div style="font-size: 0.95rem; line-height: 1.5; color: var(--text-primary); margin-bottom: 0.75rem; border-left: 3px solid ${code.color}; padding-left: 0.75rem;">
-                                "${escapeHtml(a.text || 'No text content')}"
-                            </div>
-                            <button onclick="window.jumpToSegment('${group.interviewId}', '${a.segmentId}')" 
-                                class="btn-secondary small" style="font-size: 0.8rem;">
-                                Go to context
-                            </button>
-                        </div>
-                    `).join('')}
-                </div>
-            </div>
-        `).join('');
-
-    } catch (error) {
-        console.error("Error loading usages:", error);
-        list.innerHTML = '<p style="color: red; text-align: center;">Error loading usage data.</p>';
-    }
-};
-
-// Ensure button works
-const openManagerBtn = document.getElementById('openCodeManagerBtn');
-if (openManagerBtn) {
-    openManagerBtn.onclick = () => openCodeManager(currentProjectId);
+const managerBackButton = document.getElementById('managerBackButton');
+if (managerBackButton) {
+    managerBackButton.onclick = () => openCodeManager(currentProjectId);
 }
-
-// Add jumpToSegment if missing (it might be duplicated if I don't check, but safe to overwrite or add)
-// It was in the previous view, so assume it exists.
