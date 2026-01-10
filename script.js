@@ -649,7 +649,7 @@ function renderFilteredCodes() {
                         <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
                     </svg>
                 </button>
-                <button class="delete-code-btn" onclick="event.stopPropagation(); window.deleteCodeWithConfirm('${code.id}')" title="Delete code">
+                <button class="delete-code-btn" onclick="event.stopPropagation(); window.confirmDeleteCode('${code.id}')" title="Delete code">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <polyline points="3 6 5 6 21 6"></polyline>
                         <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2-2v2"></path>
@@ -4149,8 +4149,8 @@ function findAndHighlightText(rootNode, text, assignment) {
             // Get color from codeId? assignment only has codeId.
             // We need to look up code details
             const code = currentReviewCodes.find(c => c.id === assignment.codeId);
-            const color = code ? code.color : '#3b82f6';
-            const codeName = code ? code.name : 'Code';
+            const color = code ? code.color : '#94a3b8';
+            const codeName = code ? code.name : 'Deleted Code';
 
             highlight.style.backgroundColor = color + '30';
             highlight.style.borderBottom = 'none';
@@ -4315,7 +4315,10 @@ async function loadCompletedInterview(interviewId) {
         // We might need to manually set reviewTitle since interviewDetailTitle element might still contain 'Loading...' or old data
         // Wait, openReview sets reviewTitle based on interviewDetailTitle.textContent
         // We should just set reviewTitle directly here or update the hidden title element.
-        if (reviewTitle) reviewTitle.textContent = "Review: " + (data.title || "Untitled Interview");
+        // Update the invisible detail title text so openReview picks it up correctly
+        if (interviewDetailTitle) {
+            interviewDetailTitle.textContent = data.title || "Untitled Interview";
+        }
 
         openReview(interviewId);
 
@@ -5135,6 +5138,16 @@ function createReviewSegmentElement(segment) {
 
     // --- RENDER LOGIC UPDATE ---
     let html = segment.html || '';
+
+    // Repair malformed HTML from previous bug (spaces in tags)
+    if (html) {
+        html = html.replace(/< mark/g, '<mark')
+            .replace(/data - segment - id/g, 'data-segment-id')
+            .replace(/data - highlight - start/g, 'data-highlight-start')
+            .replace(/data - note/g, 'data-note')
+            .replace(/" >/g, '">')
+            .replace(/<\/mark >/g, '</mark>');
+    }
 
     // If no stored HTML, construct it from text + highlights (Legacy/Plain Text Mode)
     if (!html) {

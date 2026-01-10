@@ -694,26 +694,19 @@ async function deleteCodeFromFirestore(projectId, codeId) {
 
         // 2. Try to cleanup assignments (best effort)
         try {
-            const interviewsSnapshot = await db.collection('interviews')
-                .where('userId', '==', currentUser.uid)
-                .where('projectId', '==', projectId)
+            const assignmentsSnapshot = await db.collection('codeAssignments')
+                .where('codeId', '==', codeId)
+                // .where('projectId', '==', projectId) // Optional: add if needed for stricter scoping
                 .get();
 
-            // Process interviews in chunks or sequentially to avoid hitting batch limits or obscure permission errors
-            for (const interviewDoc of interviewsSnapshot.docs) {
-                const assignmentsSnapshot = await interviewDoc.ref.collection('codeAssignments')
-                    .where('codeId', '==', codeId)
-                    .get();
-
-                if (!assignmentsSnapshot.empty) {
-                    const batch = db.batch();
-                    assignmentsSnapshot.docs.forEach(doc => batch.delete(doc.ref));
-                    await batch.commit();
-                }
+            if (!assignmentsSnapshot.empty) {
+                // Delete in a batch (limit 500)
+                const batch = db.batch();
+                assignmentsSnapshot.docs.forEach(doc => batch.delete(doc.ref));
+                await batch.commit();
             }
         } catch (cleanupError) {
             console.warn('Assignments cleanup incomplete (permissions/network):', cleanupError);
-            // Verify the code itself is gone
         }
 
     } catch (error) {
