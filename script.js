@@ -1051,7 +1051,15 @@ async function confirmDeleteAction() {
             }
         } catch (error) {
             console.error('Error deleting interview:', error);
-            alert('Failed to delete interview');
+            showToast('Failed to delete interview', 'error');
+        }
+    }
+    else if (itemToDelete.type === 'code') {
+        try {
+            await performDeleteCode(itemToDelete.id);
+        } catch (error) {
+            console.error('Error deleting code:', error);
+            showToast('Failed to delete code', 'error');
         }
     }
 
@@ -3955,11 +3963,11 @@ async function handleCodeDrop(event) {
         deleteBtn.innerHTML = '&times;';
         deleteBtn.title = 'Remove code';
         deleteBtn.style.cssText = `
-    margin - left: 6px;
-    cursor: pointer;
-    opacity: 0.7;
-    font - weight: 700;
-    `;
+            margin-left: 6px;
+            cursor: pointer;
+            opacity: 0.7;
+            font-weight: 700;
+        `;
         deleteBtn.onclick = (e) => {
             e.preventDefault();
             e.stopPropagation();
@@ -4165,18 +4173,18 @@ function findAndHighlightText(rootNode, text, assignment) {
                 const codeTag = document.createElement('span');
                 codeTag.className = 'code-tag';
                 codeTag.style.cssText = `
-    display: inline - block;
-    margin - left: 6px;
-    margin - right: 6px;
-    padding: 2px 8px;
-    font - size: 0.7rem;
-    font - weight: 600;
-    color: white;
-    background: ${color};
-    border - radius: 4px;
-    vertical - align: baseline;
-    white - space: nowrap;
-    `;
+                    display: inline-block;
+                    margin-left: 6px;
+                    margin-right: 6px;
+                    padding: 2px 8px;
+                    font-size: 0.7rem;
+                    font-weight: 600;
+                    color: white;
+                    background: ${color};
+                    border-radius: 4px;
+                    vertical-align: baseline;
+                    white-space: nowrap;
+                `;
 
                 const tagName = document.createElement('span');
                 tagName.textContent = codeName;
@@ -4187,11 +4195,11 @@ function findAndHighlightText(rootNode, text, assignment) {
                 deleteBtn.innerHTML = '&times;';
                 deleteBtn.title = 'Remove code';
                 deleteBtn.style.cssText = `
-    margin - left: 6px;
-    cursor: pointer;
-    opacity: 0.7;
-    font - weight: 700;
-    `;
+                    margin-left: 6px;
+                    cursor: pointer;
+                    opacity: 0.7;
+                    font-weight: 700;
+                `;
                 deleteBtn.onclick = (e) => {
                     e.preventDefault();
                     e.stopPropagation();
@@ -4438,14 +4446,14 @@ async function downloadTranscriptAsPDF() {
         });
 
         const headerHtml = `
-        < div style = "font-family: Inter, sans-serif; padding-bottom: 20px; border-bottom: 2px solid #eee; margin-bottom: 30px;" >
+            <div style="font-family: Inter, sans-serif; padding-bottom: 20px; border-bottom: 2px solid #eee; margin-bottom: 30px;">
                 <h1 style="color: #1a202c; margin: 0; font-size: 24px; margin-bottom: 10px;">${sessionTitle}</h1>
                 <div style="color: #4a5568; font-size: 14px; line-height: 1.6;">
                     <strong>Date:</strong> ${dateStr}<br>
                     <strong>Participant:</strong> ${sessionTitle}
                 </div>
                 <p style="color: #94a3b8; margin: 10px 0 0 0; font-size: 12px;">Transcript Exported from Contexture</p>
-            </div >
+            </div>
         `;
 
         // Create a clone for the PDF to add the header without affecting the real UI
@@ -4473,7 +4481,7 @@ async function downloadTranscriptAsPDF() {
             if (noteText) {
                 // Create a visible span for the note
                 const noteSpan = document.createElement('span');
-                noteSpan.innerHTML = `< span style = "background-color: #f1f5f9; color: #475569; padding: 2px 6px; border-radius: 4px; font-size: 0.75em; border: 1px solid #e2e8f0; display: inline-block; margin-left: 6px; vertical-align: middle; font-weight: 600;" >📝 ${noteText}</span > `;
+                noteSpan.innerHTML = `<span style="background-color: #f1f5f9; color: #475569; padding: 2px 6px; border-radius: 4px; font-size: 0.75em; border: 1px solid #e2e8f0; display: inline-block; margin-left: 6px; vertical-align: middle; font-weight: 600;">📝 ${noteText}</span>`;
 
                 // Intelligent placement: Attempt to place note after the current word if inside one to avoid splitting words
                 let targetNode = highlight;
@@ -4966,8 +4974,8 @@ document.addEventListener('mouseup', (e) => {
 
                 // Show popdown - use fixed positioning relative to viewport
                 inlineNotePopdown.style.position = 'fixed';
-                inlineNotePopdown.style.top = `${rect.bottom + 10} px`;
-                inlineNotePopdown.style.left = `${rect.left} px`;
+                inlineNotePopdown.style.top = `${rect.bottom + 10}px`;
+                inlineNotePopdown.style.left = `${rect.left}px`;
                 inlineNotePopdown.classList.remove('hidden');
 
                 setTimeout(() => inlineNoteInput.focus(), 50);
@@ -5066,7 +5074,7 @@ function createReviewSegmentElement(segment) {
     // Speaker Label
     if (segment.speaker) {
         const speakerLabel = document.createElement('div'); // Block element
-        speakerLabel.className = `speaker - label ${segment.speaker} `;
+        speakerLabel.className = `speaker-label ${segment.speaker}`;
         speakerLabel.style.display = 'inline-block'; // Keep badge look
         speakerLabel.style.whiteSpace = 'nowrap'; // Prevent wrapping (User request: "no umbruch")
         speakerLabel.style.marginBottom = '0';
@@ -5141,7 +5149,7 @@ function createReviewSegmentElement(segment) {
             const chunk = text.substring(h.start, h.end);
             // Ensure we use a unique ID for easier DOM manipulation later if needed
             // But strict start-offset reliance is okay if we keep text sync'd.
-            html += `< mark class="word-highlight" data - segment - id="${segment.id}" data - highlight - start="${h.start}" data - note="${escapeHtml(h.note || '')}" > ${escapeHtml(chunk)}</mark > `;
+            html += `<mark class="word-highlight" data-segment-id="${segment.id}" data-highlight-start="${h.start}" data-note="${escapeHtml(h.note || '')}">${escapeHtml(chunk)}</mark>`;
             lastIndex = h.end;
         });
         if (lastIndex < text.length) {
@@ -5981,7 +5989,21 @@ async function performDeleteCode(codeId) {
     try {
         await window.deleteCodeFromFirestore(currentProjectId, codeId);
         showToast('Code deleted');
-        openCodeManager(currentProjectId);
+
+        // 1. Refresh global project code list
+        await renderCodesList(currentProjectId);
+
+        // 2. Refresh review mode sidebar if active
+        if (typeof loadCodesForReview === 'function' && !document.getElementById('transcriptReviewView').classList.contains('hidden')) {
+            await loadCodesForReview();
+        }
+
+        // 3. Close Code Manager and scroll to codes list
+        document.getElementById('codeManagerModal').classList.add('hidden');
+        setTimeout(() => {
+            const section = document.getElementById('section-codes');
+            if (section) section.scrollIntoView({ behavior: 'smooth' });
+        }, 100);
     } catch (e) {
         console.error(e);
         showToast('Delete failed', 'error');

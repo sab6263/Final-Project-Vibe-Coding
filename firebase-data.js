@@ -689,25 +689,33 @@ async function deleteCodeFromFirestore(projectId, codeId) {
     if (!currentUser || !projectId) return;
 
     try {
-        const batch = db.batch();
+        // 1. Delete the code document first (to ensure user sees deletion even if assignments fail)
+        await db.collection('projects').doc(projectId).collection('codes').doc(codeId).delete();
 
-        // Delete all code assignments for this code (these are in interviews subcollection)
-        const interviewsSnapshot = await db.collection('interviews')
-            .where('userId', '==', currentUser.uid)
-            .where('projectId', '==', projectId)
-            .get();
-
-        for (const interviewDoc of interviewsSnapshot.docs) {
-            const assignmentsSnapshot = await interviewDoc.ref.collection('codeAssignments')
-                .where('codeId', '==', codeId)
+        // 2. Try to cleanup assignments (best effort)
+        try {
+            const interviewsSnapshot = await db.collection('interviews')
+                .where('userId', '==', currentUser.uid)
+                .where('projectId', '==', projectId)
                 .get();
-            assignmentsSnapshot.docs.forEach(doc => batch.delete(doc.ref));
+
+            // Process interviews in chunks or sequentially to avoid hitting batch limits or obscure permission errors
+            for (const interviewDoc of interviewsSnapshot.docs) {
+                const assignmentsSnapshot = await interviewDoc.ref.collection('codeAssignments')
+                    .where('codeId', '==', codeId)
+                    .get();
+
+                if (!assignmentsSnapshot.empty) {
+                    const batch = db.batch();
+                    assignmentsSnapshot.docs.forEach(doc => batch.delete(doc.ref));
+                    await batch.commit();
+                }
+            }
+        } catch (cleanupError) {
+            console.warn('Assignments cleanup incomplete (permissions/network):', cleanupError);
+            // Verify the code itself is gone
         }
 
-        // Delete the code itself
-        batch.delete(db.collection('projects').doc(projectId).collection('codes').doc(codeId));
-
-        await batch.commit();
     } catch (error) {
         console.error('Error deleting code:', error);
         throw error;
@@ -728,11 +736,11 @@ async function loadCodesForProject(projectId) {
             ...doc.data()
         }));
 
-        // Sort by creation date
+        // Sort by creation date (Newest first)
         codes.sort((a, b) => {
             const aTime = (a.createdAt && typeof a.createdAt.toMillis === 'function') ? a.createdAt.toMillis() : 0;
             const bTime = (b.createdAt && typeof b.createdAt.toMillis === 'function') ? b.createdAt.toMillis() : 0;
-            return aTime - bTime;
+            return bTime - aTime;
         });
 
         return codes;

@@ -583,6 +583,10 @@ body.fullscreen-active #interviewDetailView {
 }
 
 /* Modal - Glassy Overlay */
+#deleteConfirmModal {
+    z-index: 9999 !important;
+}
+
 .modal-overlay {
     position: fixed;
     top: 0;
@@ -2132,4 +2136,9 @@ input:checked+.slider:before {
     color: var(--brand-primary);
     background: white;
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+/* Fix for nested modals: Ensure delete confirmation is always on top */
+#deleteConfirmModal {
+    z-index: 9999 !important;
 }
