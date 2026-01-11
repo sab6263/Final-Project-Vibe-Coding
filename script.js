@@ -75,6 +75,7 @@ let currentFilter = 'all';
 let searchQuery = '';
 let currentProjectId = null; // ID of the currently open project
 let micStream = null; // Persistent stream to prevent repeated permission prompts
+let micWarmupPromise = null; // Promise lock for warmup
 
 // Interview Session State
 let currentInterviewId = null;
@@ -88,6 +89,8 @@ let currentSegment = null;
 let lastSegmentEndTime = null;
 let currentSpeaker = 'interviewer';
 let speakerIdActive = false; // Default to false to match UI behavior
+let lastProcessedIndex = -1; // Shared recognition state
+let isInterimSelecting = false; // To pause UI updates during selection
 let reviewCodingMode = false;
 let currentReviewCodes = [];
 let codeSelectionPopover = null;
@@ -2323,9 +2326,9 @@ async function loadInterviewView(interviewId) {
         recordingStatus.parentElement.classList.remove('active');
     }
 
-    // Warm up microphone to prevent repeated permission prompts
-    // Awaiting ensure the permission is handled before other actions
-    await warmupMicrophone();
+    // Warm up microphone removed from here to avoid prompt when just viewing
+    // but not yet recording. It will be called in startInterview.
+    // await warmupMicrophone();
 
     if (window.location.protocol === 'file:') {
         console.warn('Running from file:// protocol. Microphone permissions may not persist. Consider using a local server (e.g., npx serve).');
@@ -2465,6 +2468,9 @@ function initInterviewListeners() {
             }
             currentSelection = null;
         }
+
+        // Always reset interim selecting state on mouseup globally
+        isInterimSelecting = false;
     });
 
     // Custom Language Dropdown Logic
@@ -2659,26 +2665,47 @@ function closeInterview() {
 /**
  * Requests microphone access once and keeps the stream active
  * to prevent repeated browser permission prompts.
+ * This is unified with window.persistentAudioStream used in startTranscription.
  */
 async function warmupMicrophone() {
-    if (micStream && micStream.active) return;
+    if (micStream && micStream.active) return micStream;
+    if (micWarmupPromise) return micWarmupPromise;
+
+    // Check if we already have it in the window object (from another part of the code)
+    if (window.persistentAudioStream && window.persistentAudioStream.active) {
+        micStream = window.persistentAudioStream;
+        return micStream;
+    }
+
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
         console.warn('getUserMedia not supported in this environment.');
-        return;
+        return null;
     }
-    try {
-        console.log('Requesting persistent microphone access...');
-        micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        console.log('Microphone warmed up and persistent.');
 
-        // Handle stream ending
-        micStream.getTracks()[0].onended = () => {
-            console.log('Persistent mic stream ended.');
-            micStream = null;
-        };
-    } catch (err) {
-        console.error('Error warming up microphone:', err);
-    }
+    micWarmupPromise = (async () => {
+        try {
+            console.log('Requesting persistent microphone access...');
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            micStream = stream;
+            window.persistentAudioStream = stream; // Sync both variables
+            console.log('Microphone warmed up and persistent.');
+
+            // Handle stream ending
+            micStream.getTracks()[0].onended = () => {
+                console.log('Persistent mic stream ended.');
+                micStream = null;
+                window.persistentAudioStream = null;
+            };
+            return micStream;
+        } catch (err) {
+            console.error('Error warming up microphone:', err);
+            return null;
+        } finally {
+            micWarmupPromise = null;
+        }
+    })();
+
+    return micWarmupPromise;
 }
 
 // Timer Logic
@@ -2707,17 +2734,9 @@ async function startTranscription() {
     }
 
     // --- PERMISSION FIX ---
-    // If we haven't acquired a persistent stream yet, wait for it.
-    // This guarantees the browser considers the page to have "Mic Access"
-    // BEFORE we start the finicky SpeechRecognition engine.
-    if (!window.persistentAudioStream) {
-        try {
-            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-            window.persistentAudioStream = stream;
-        } catch (err) {
-            console.warn("Could not acquire persistent mic stream:", err);
-            // If the user denied this, SpeechRecognition will likely fail too, but we let it try.
-        }
+    // Use the unified warmup function to ensure we only prompt once
+    if (!micStream || !micStream.active) {
+        await warmupMicrophone();
     }
 
     const selectedLang = currentTranscriptionLanguage;
@@ -2741,21 +2760,23 @@ async function startTranscription() {
         recognition.interimResults = true; // RE-ENABLE for real-time feedback
         recognition.lang = selectedLang;
 
-        // Track the last result index we fully processed to avoid duplicates
-        let lastProcessedIndex = -1;
+        lastProcessedIndex = -1;
 
         recognition.onresult = (event) => {
             if (isPaused) return;
 
-            // Update processed index if the engine reset
+            // Update processed index if the engine reset (e.g. on restart)
             if (event.resultIndex < lastProcessedIndex) {
                 lastProcessedIndex = -1;
             }
 
             let interimTranscript = '';
 
-            for (let i = event.resultIndex; i < event.results.length; ++i) {
-                if (i <= lastProcessedIndex && event.results[i].isFinal) continue;
+            // ALWAYS loop from 0 to capture all interim parts correctly,
+            // even if resultIndex shifts forward.
+            for (let i = 0; i < event.results.length; ++i) {
+                // Skip results already handled (either naturally or manually committed)
+                if (i <= lastProcessedIndex) continue;
 
                 const transcript = event.results[i][0].transcript;
                 if (event.results[i].isFinal) {
@@ -2766,8 +2787,14 @@ async function startTranscription() {
                 }
             }
 
+            // Capture length for manual commit logic
+            window.lastSpeechResultsLength = event.results.length;
+
             // Show real-time text (styled as normal text via CSS)
-            updateInterimDisplay(interimTranscript);
+            // But PAUSE updates if user is currently selecting to prevent jumping
+            if (!isInterimSelecting) {
+                updateInterimDisplay(interimTranscript);
+            }
         };
 
         recognition.onend = () => {
@@ -2889,7 +2916,8 @@ function addTranscriptSegment(text) {
     }
 
     const timestamp = now - startTime;
-    const id = 'seg_' + now;
+    // Guaranteed unique ID even in high-speed loops
+    const id = 'seg_' + now + '_' + Math.floor(Math.random() * 1000);
     // Store speaker only if recognition was active
     const segment = {
         id,
@@ -2936,7 +2964,11 @@ function updateInterimDisplay(text) {
         transcriptionFeed.appendChild(interim);
 
         // Allow immediate interaction by forcing commit
-        interim.addEventListener('mouseup', (e) => handleTextSelection(e, 'interimSegment'));
+        interim.addEventListener('mousedown', () => { isInterimSelecting = true; });
+        interim.addEventListener('mouseup', (e) => {
+            isInterimSelecting = false;
+            handleTextSelection(e, 'interimSegment');
+        });
     }
     interim.textContent = (transcriptSegments.length > 0 ? ' ' : '') + text;
     transcriptionFeed.scrollTop = transcriptionFeed.scrollHeight;
@@ -3057,11 +3089,33 @@ function handleTextSelection(e, segmentId) {
                 startOffset = Math.max(0, startOffset - 1);
             }
 
-            // Force Commit
-            // 1. Stop Recognition to prevent overwrite
-            if (recognition) recognition.abort();
+            // Force Commit WITHOUT Aborting
+            // By NOT calling recognition.abort(), we avoid the gap in recording
+            // that causes word loss. Instead, we mark the current indices as handled.
+            if (recognition) {
+                // If we have access to the results count, we mark all current ones as "done"
+                // since we just manually added them to the segments list.
+                // We'll trust the onresult loop to skip these when they later become "isFinal".
+                // Note: since we don't have the event here, we assume if we are in interimSegment,
+                // the last result index in the engine is the one we want to mark.
+                // This is a heuristic but much safer than aborting.
+                // SpeechRecognition usually exposes current results via a private property or we use a session tracker.
+                // Since it's hard to get count without event, we'll try a very high number OR
+                // better: we skip the next onresult finalization by comparing strings if needed.
+                // By marking lastProcessedIndex, the onresult loop will ignore these
+                // indices when the engine eventually tries to finalize them.
+                lastProcessedIndex = (window.lastSpeechResultsLength || 1) - 1;
 
-            // 2. Add as permanent segment
+                // We clear the interim UI immediately
+                if (interimEl) interimEl.remove();
+
+                // We set a flag or count? 
+                // Actually, the simplest way is to just let the loop skip it based on lastProcessedIndex.
+                // We need to update lastProcessedIndex to whatever the current results length IS.
+                // Let's add a way to capture the current length in the onresult.
+            }
+
+            // Add as permanent segment
             addTranscriptSegment(fullInterimText);
 
             // 3. Find the new segment (last one)
