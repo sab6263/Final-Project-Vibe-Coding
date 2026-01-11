@@ -1,0 +1,15 @@
+{
+  "name": "contexture-app",
+  "version": "1.0.0",
+  "description": "Qualitative Research & Transcription App",
+  "main": "index.html",
+  "scripts": {
+    "start": "npx serve ."
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "serve": "^14.2.4"
+  }
+}

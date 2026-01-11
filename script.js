@@ -3659,6 +3659,7 @@ function openReview(interviewId) {
     interviewDetailView.classList.add('hidden');
     projectsOverview.classList.add('hidden');
     projectDetailView.classList.add('hidden');
+    document.getElementById('codeManagerModal').classList.add('hidden');
     document.body.classList.add('fullscreen-active');
 
     // Set Title
@@ -5861,7 +5862,7 @@ window.openCodeUsageModal = async function (projectId, codeId) {
     // 2. Adjust Layout for Single View
     if (sidebar) sidebar.style.display = 'none';
     if (body) body.style.gridTemplateColumns = '1fr';
-    if (title) title.textContent = "Code Usage Details";
+    if (title) title.textContent = "Code usage details";
 
     modal.classList.remove('hidden');
 
@@ -7029,6 +7030,7 @@ if (!document.getElementById('codeAnalysisStyles')) {
 
 async function jumpToSegment(interviewId, segmentId) {
     document.getElementById('analysisView').classList.add('hidden');
+    document.getElementById('codeManagerModal').classList.add('hidden');
     if (currentInterviewId === interviewId && !transcriptReviewView.classList.contains('hidden')) {
         scrollToAndHighlight(segmentId);
         return;
