@@ -754,18 +754,35 @@ async function saveCode() {
     const codeId = currentCodeData.codeId;
 
     try {
+        let finalCodeId = null;
         if (codeId) {
             // Update existing code
             await window.updateCodeInFirestore(projectId, codeId, codeData);
             showToast('Code updated');
         } else {
             // Create new code
-            await window.saveCodeToFirestore(projectId, codeData);
+            const newCode = await window.saveCodeToFirestore(projectId, codeData);
+            finalCodeId = newCode.id;
             showToast('Code created');
         }
 
+        const refreshCodeId = codeId || finalCodeId;
         closeCodeModal();
         await renderCodesList(projectId);
+
+        // Refresh Analysis Page if active
+        if (!document.getElementById('analysisView').classList.contains('hidden')) {
+            openAnalysisPage(projectId, refreshCodeId);
+        }
+
+        // Refresh Code Manager Modal if active
+        if (!document.getElementById('codeManagerModal').classList.contains('hidden')) {
+            // If it's the standalone usage modal (sidebar hidden), we might need to refresh it specifically
+            const sidebar = document.querySelector('#codeManagerModal .code-manager-sidebar');
+            if (sidebar && sidebar.style.display === 'none') {
+                window.openCodeUsageModal(projectId, refreshCodeId);
+            }
+        }
 
         // If we are in review mode, update that list too
         if (typeof transcriptReviewView !== 'undefined' && !transcriptReviewView.classList.contains('hidden')) {
@@ -780,9 +797,7 @@ async function saveCode() {
 /**
  * Edit existing code
  */
-function editCode(projectId, codeId) {
-    openCodeModal(projectId, codeId);
-}
+
 
 /**
  * Delete code with confirmation
@@ -821,7 +836,6 @@ confirmDeleteAction = async function () {
 
 // Expose functions globally
 window.openCodeModal = openCodeModal;
-window.editCode = editCode;
 window.deleteCodeWithConfirm = deleteCodeWithConfirm;
 
 /**
