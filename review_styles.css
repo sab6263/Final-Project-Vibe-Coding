@@ -134,8 +134,10 @@
     line-height: 1.6;
     font-size: 0.9rem;
     color: var(--text-body);
+    color: var(--text-body);
     position: relative;
-    max-width: 80%;
+    width: auto;
+    max-width: none;
 }
 
 .review-note-meta {

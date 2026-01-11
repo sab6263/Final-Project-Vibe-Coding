@@ -2738,7 +2738,7 @@ async function startTranscription() {
 
         recognition = new SpeechRecognition();
         recognition.continuous = true;
-        recognition.interimResults = true;
+        recognition.interimResults = true; // RE-ENABLE for real-time feedback
         recognition.lang = selectedLang;
 
         // Track the last result index we fully processed to avoid duplicates
@@ -2747,9 +2747,7 @@ async function startTranscription() {
         recognition.onresult = (event) => {
             if (isPaused) return;
 
-            // Update processed index if the engine reset (e.g. after pause/resume or error)
-            // event.resultIndex is the index of the *first* result in this batch that has changed
-            // If it's smaller than what we've seen, the engine likely reset.
+            // Update processed index if the engine reset
             if (event.resultIndex < lastProcessedIndex) {
                 lastProcessedIndex = -1;
             }
@@ -2757,10 +2755,7 @@ async function startTranscription() {
             let interimTranscript = '';
 
             for (let i = event.resultIndex; i < event.results.length; ++i) {
-                // If we already processed this index as final, skip it
-                if (i <= lastProcessedIndex && event.results[i].isFinal) {
-                    continue;
-                }
+                if (i <= lastProcessedIndex && event.results[i].isFinal) continue;
 
                 const transcript = event.results[i][0].transcript;
                 if (event.results[i].isFinal) {
@@ -2770,6 +2765,8 @@ async function startTranscription() {
                     interimTranscript += transcript;
                 }
             }
+
+            // Show real-time text (styled as normal text via CSS)
             updateInterimDisplay(interimTranscript);
         };
 
@@ -2909,6 +2906,22 @@ function addTranscriptSegment(text) {
 
     renderSegment(segment);
     lastSegmentEndTime = now;
+
+    // AUTO-SAVE (Instantly Safe)
+    if (currentInterviewId) {
+        // Debounce or just save? Ideally debounce to avoid firestore spam, 
+        // but for "instantly safe" we can just save. It's per-sentence usually.
+        // We'll trust Firestore SDK to handle batching if it gets too crazy,
+        // but typically sentences are > 2-3 seconds apart.
+        try {
+            window.updateInterviewInFirestore(currentInterviewId, {
+                transcript: transcriptSegments, // Save full array
+                updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+            }).catch(err => console.error("Auto-save failed:", err));
+        } catch (e) {
+            console.error("Auto-save error:", e);
+        }
+    }
 }
 
 function updateInterimDisplay(text) {
@@ -3769,7 +3782,15 @@ function setupReviewModeListeners() {
     if (newCodeFromReview) {
         newCodeFromReview.onclick = () => {
             if (currentProjectId) {
-                openCodeModal(currentProjectId);
+                if (typeof openCodeModal === 'function') {
+                    openCodeModal(currentProjectId);
+                } else {
+                    console.error('openCodeModal function not found');
+                    // Fallback to Code Manager toggle if modal missing
+                    if (typeof openAnalysisPage === 'function') {
+                        openAnalysisPage(currentProjectId);
+                    }
+                }
             }
         }
     }
@@ -5529,25 +5550,7 @@ function createReviewSegmentElement(segment) {
         mark.title = "";
         mark.style.cursor = "pointer";
 
-        // Allow removal on click when in edit/notes mode (but NOT in coding mode)
-        mark.addEventListener('click', (e) => {
-            if (reviewCodingMode) return;
-
-            if (reviewEditMode || reviewNotesMode) {
-                e.preventDefault();
-                e.stopPropagation();
-
-                const start = mark.getAttribute('data-highlight-start');
-                const segId = mark.getAttribute('data-segment-id');
-
-                openConfirmModal(
-                    'Remove Note',
-                    'Are you sure you want to remove this highlight and note?',
-                    'Remove',
-                    () => deleteInlineNote(segId, start)
-                );
-            }
-        });
+        // Click listener removed - deletion is handled via hover tooltip cross
     });
 
     return div;

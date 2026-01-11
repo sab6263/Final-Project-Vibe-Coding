@@ -43,6 +43,19 @@
     /* Ensure full width */
 }
 
+/* Interim segment styling - Make it look INSTANT (no italics, full opacity) */
+.transcript-segment.interim {
+    opacity: 1;
+    font-style: normal;
+    color: var(--text-body);
+}
+
+.transcript-segment {
+    /* ... existing styles ... */
+    position: relative;
+    /* For tooltip positioning */
+}
+
 .sub-questions-container {
     padding-left: 1.5rem;
     margin-top: 0.5rem;

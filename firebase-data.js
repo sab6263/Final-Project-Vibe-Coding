@@ -693,6 +693,15 @@ async function deleteCodeFromFirestore(projectId, codeId) {
         await db.collection('projects').doc(projectId).collection('codes').doc(codeId).delete();
 
         // 2. Try to cleanup assignments (best effort)
+        /* 
+           User Request: "make sure when deleting a code somewhere, that in the coding review transcript, 
+           the highlight is still shown in grey with 'Deleted code'"
+           
+           Therefore, we DO NOT delete the assignments here. We let them become "orphans".
+           The rendering logic handles orphan assignments by displaying "Deleted Code" in grey.
+        */
+
+        /*
         try {
             const assignmentsSnapshot = await db.collection('codeAssignments')
                 .where('codeId', '==', codeId)
@@ -708,6 +717,7 @@ async function deleteCodeFromFirestore(projectId, codeId) {
         } catch (cleanupError) {
             console.warn('Assignments cleanup incomplete (permissions/network):', cleanupError);
         }
+        */
 
     } catch (error) {
         console.error('Error deleting code:', error);
