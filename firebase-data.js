@@ -917,11 +917,13 @@ window.saveCategoryToFirestore = async function (projectId, categoryData) {
             name: categoryData.name || 'Untitled Category',
             description: categoryData.description || '',
             color: categoryData.color || '#94a3b8',
+            parentId: categoryData.parentId || null, // For subcategory hierarchy
             userId: currentUser.uid,
             createdAt: firebase.firestore.FieldValue.serverTimestamp(),
             updatedAt: firebase.firestore.FieldValue.serverTimestamp()
         };
         await catRef.set(category);
+        console.log('Category saved with parentId:', category.parentId);
         return category;
     } catch (error) {
         console.error('Error saving category:', error);

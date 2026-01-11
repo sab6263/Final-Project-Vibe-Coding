@@ -635,7 +635,7 @@ function renderFilteredCodes() {
 
     list.className = 'list-container';
     list.innerHTML = filteredCodes.map(code => `
-        <div id="code-item-${code.id}" class="code-item" data-code-id="${code.id}" data-code-name="${escapeHtml(code.name || '')}" data-code-color="${code.color}" onclick="openAnalysisPage('${currentProjectId}', '${code.id}')" style="cursor: pointer;">
+        <div id="code-item-${code.id}" class="code-item" data-code-id="${code.id}" data-code-name="${escapeHtml(code.name || '')}" data-code-color="${code.color}" onclick="window.openCodeUsageModal('${currentProjectId}', '${code.id}')" style="cursor: pointer;">
             <div class="code-item-left">
                 <div class="code-color-preview" style="background: ${code.color};"></div>
                 <div class="code-item-info">
@@ -5690,6 +5690,11 @@ if (openCodeManagerBtn) {
 if (closeCodeManagerModal) {
     closeCodeManagerModal.addEventListener('click', () => {
         codeManagerModal.classList.add('hidden');
+        // Restore Layout for full Analysis View
+        const sidebar = codeManagerModal.querySelector('.code-manager-sidebar');
+        const body = codeManagerModal.querySelector('.modal-body');
+        if (sidebar) sidebar.style.display = '';
+        if (body) body.style.gridTemplateColumns = '';
     });
 }
 
@@ -5766,6 +5771,51 @@ window.editCode = function (codeId) {
 // ANALYSIS & CODE MANAGEMENT (AXIAL CODING)
 // ============================================================================
 
+// Standalone Code Usage Modal
+window.openCodeUsageModal = async function (projectId, codeId) {
+    console.log("Opening Usage Modal for", codeId);
+
+    // 1. Prepare Modal elements
+    const modal = document.getElementById('codeManagerModal');
+    const sidebar = modal.querySelector('.code-manager-sidebar');
+    const body = modal.querySelector('.modal-body');
+    const title = modal.querySelector('.modal-header h2');
+
+    // 2. Adjust Layout for Single View
+    if (sidebar) sidebar.style.display = 'none';
+    if (body) body.style.gridTemplateColumns = '1fr';
+    if (title) title.textContent = "Code Usage Details";
+
+    modal.classList.remove('hidden');
+
+    // 3. Loading State
+    const detailContent = document.getElementById('codeManagerDetailContent');
+    const emptyState = document.getElementById('codeManagerDetailEmpty');
+
+    if (emptyState) emptyState.classList.add('hidden');
+    if (detailContent) {
+        detailContent.classList.remove('hidden');
+        detailContent.innerHTML = '<div style="text-align: center; padding: 2rem; color: var(--text-muted); display: flex; align-items: center; justify-content: center; height: 200px;">Loading usage data...</div>';
+    }
+
+    try {
+        // 4. Fetch Data
+        const codes = await window.loadCodesForProject(projectId);
+        const code = codes.find(c => c.id === codeId);
+        if (!code) throw new Error('Code not found');
+
+        const allSegments = await window.getAllCodedSegments(projectId);
+        const usage = allSegments.filter(s => s.codeId === codeId);
+
+        // 5. Render
+        renderAnalysisDetail(codeId, code.name, code.color, null, usage);
+
+    } catch (e) {
+        console.error("Error loading usage data", e);
+        if (detailContent) detailContent.innerHTML = '<div style="color: #ef4444; padding: 2rem; text-align: center;">Error loading data: ' + e.message + '</div>';
+    }
+};
+
 window.openAnalysisPage = openAnalysisPage;
 
 async function openAnalysisPage(projectId, initialCodeId = null) {
@@ -5786,11 +5836,18 @@ async function openAnalysisPage(projectId, initialCodeId = null) {
 
     // 3. Loading State
     const listContainer = document.getElementById('analysisCodesList');
-    listContainer.innerHTML = '<div style="text-align: center; padding: 2rem; color: var(--text-muted);">Loading analysis...</div>';
+    if (listContainer) {
+        listContainer.innerHTML = '<div style="text-align: center; padding: 2rem; color: var(--text-muted);">Loading analysis...</div>';
+    } else {
+        console.error("CRITICAL: analysisCodesList not found in openAnalysisPage!");
+    }
 
     // Clear Detail View
-    document.getElementById('analysisDetailEmpty').classList.remove('hidden');
-    document.getElementById('analysisDetailContent').classList.add('hidden');
+    const emptyState = document.getElementById('codeManagerDetailEmpty');
+    const contentState = document.getElementById('codeManagerDetailContent');
+
+    if (emptyState) emptyState.classList.remove('hidden');
+    if (contentState) contentState.classList.add('hidden');
 
     // Clear selection state
     document.querySelectorAll('.code-manager-item').forEach(el => el.classList.remove('active'));
@@ -5844,13 +5901,18 @@ async function openAnalysisPage(projectId, initialCodeId = null) {
         }
     } catch (error) {
         console.error("Error loading analysis page:", error);
-        listContainer.innerHTML = '<div style="color: #ef4444; padding: 1rem; text-align: center;">Error loading data.</div>';
+        if (listContainer) {
+            listContainer.innerHTML = '<div style="color: #ef4444; padding: 1rem; text-align: center;">Error loading data: ' + error.message + '</div>';
+        }
     }
 }
 
 function renderAnalysisSidebar(codes, categories, codeUsageMap) {
     const listContainer = document.getElementById('analysisCodesList');
-    if (!listContainer) return;
+    if (!listContainer) {
+        console.error("CRITICAL: analysisCodesList not found!");
+        return;
+    }
 
     if (!codes || codes.length === 0) {
         listContainer.innerHTML = `
@@ -5892,28 +5954,23 @@ function renderAnalysisSidebar(codes, categories, codeUsageMap) {
     function renderCategory(cat, level = 0) {
         const indent = level * 16;
         const hasChildren = cat.children.length > 0 || cat.codes.length > 0;
-        const categoryCodeCount = cat.codes.length + cat.children.reduce((sum, c) => sum + c.codes.length, 0);
 
         let html = `
             <div class="folder-item" data-category-id="${cat.id}" data-level="${level}" style="margin-left: ${indent}px;">
                 <div class="folder-header" onclick="toggleFolderCollapse('${cat.id}')" 
                      style="display: flex; align-items: center; gap: 0.5rem; padding: 0.5rem 0.75rem; background: ${level === 0 ? '#f8fafc' : '#ffffff'}; border-radius: 6px; cursor: pointer; margin-bottom: 4px; border: 1px solid #e2e8f0; transition: all 0.2s;">
-                    <svg class="folder-chevron" data-cat-id="${cat.id}" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="2" style="transition: transform 0.2s; ${hasChildren ? '' : 'visibility: hidden;'}">
+                    <svg class="folder-chevron" data-cat-id="${cat.id}" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2.5" style="transition: transform 0.3s ease; transform: rotate(90deg); flex-shrink: 0;">
                         <polyline points="9 18 15 12 9 6"></polyline>
                     </svg>
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="#ea580c" stroke="#ea580c" stroke-width="1">
-                        <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
-                    </svg>
-                    <span style="font-weight: 600; font-size: 0.85rem; flex: 1;">${escapeHtml(cat.name)}</span>
-                    <span style="font-size: 0.7rem; color: #94a3b8;">(${categoryCodeCount})</span>
-                    ${level < 2 ? `<button onclick="event.stopPropagation(); createSubCategory('${cat.id}')" style="background: none; border: none; padding: 2px; color: #94a3b8; cursor: pointer;" title="Add subcategory">
+                    <span style="font-weight: 600; font-size: 0.9rem; flex: 1; color: #334155;">${escapeHtml(cat.name)}</span>
+                    ${level < 2 ? `<button onclick="event.stopPropagation(); createSubCategory('${cat.id}')" style="background: none; border: none; padding: 4px; color: #94a3b8; cursor: pointer; opacity: 0.6; transition: opacity 0.2s;" title="Add subcategory" onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='0.6'">
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
                     </button>` : ''}
-                    <button onclick="event.stopPropagation(); confirmDeleteCategory('${cat.id}')" style="background: none; border: none; padding: 2px; color: #94a3b8; cursor: pointer;" title="Delete">
+                    <button onclick="event.stopPropagation(); confirmDeleteCategory('${cat.id}')" style="background: none; border: none; padding: 4px; color: #94a3b8; cursor: pointer; opacity: 0.6; transition: opacity 0.2s;" title="Delete" onmouseover="this.style.opacity='1';this.style.color='#ef4444'" onmouseout="this.style.opacity='0.6';this.style.color='#94a3b8'">
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
                     </button>
                 </div>
-                <div class="folder-content sortable-codes" data-category-id="${cat.id}" style="margin-left: 20px; display: block;">
+                <div class="folder-content sortable-codes" data-category-id="${cat.id}" style="margin-left: 24px; display: block;">
                     ${cat.codes.map(code => renderCodeItem(code, codeUsageMap)).join('')}
                     ${cat.children.map(child => renderCategory(child, level + 1)).join('')}
                 </div>
@@ -5946,14 +6003,16 @@ function renderAnalysisSidebar(codes, categories, codeUsageMap) {
     if (uncategorizedCodes.length > 0) {
         html += `
             <div class="folder-item" data-category-id="uncategorized" style="margin-top: 1rem;">
-                <div class="folder-header" style="display: flex; align-items: center; gap: 0.5rem; padding: 0.5rem 0.75rem; background: #f1f5f9; border-radius: 6px; margin-bottom: 4px;">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="#94a3b8" stroke="#94a3b8" stroke-width="1">
+                <div class="folder-header" onclick="toggleFolderCollapse('uncategorized')" style="display: flex; align-items: center; gap: 0.5rem; padding: 0.5rem 0.75rem; background: #f1f5f9; border-radius: 6px; margin-bottom: 4px; cursor: pointer;">
+                    <svg class="folder-chevron" data-cat-id="uncategorized" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2.5" style="transition: transform 0.3s ease; transform: rotate(90deg); flex-shrink: 0;">
+                        <polyline points="9 18 15 12 9 6"></polyline>
+                    </svg>
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="#94a3b8" stroke="#94a3b8" stroke-width="1">
                         <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
                     </svg>
-                    <span style="font-weight: 600; font-size: 0.85rem; color: #64748b; flex: 1;">Uncategorized</span>
-                    <span style="font-size: 0.7rem; color: #94a3b8;">(${uncategorizedCodes.length})</span>
+                    <span style="font-weight: 600; font-size: 0.9rem; color: #64748b; flex: 1;">Uncategorized</span>
                 </div>
-                <div class="folder-content sortable-codes" data-category-id="uncategorized" style="margin-left: 20px;">
+                <div class="folder-content sortable-codes" data-category-id="uncategorized" style="margin-left: 24px;">
                     ${uncategorizedCodes.map(code => renderCodeItem(code, codeUsageMap)).join('')}
                 </div>
             </div>`;
@@ -5963,6 +6022,20 @@ function renderAnalysisSidebar(codes, categories, codeUsageMap) {
 
     // Initialize SortableJS on each sortable container
     initSortableFolders();
+
+    // Append hidden data elements for analysis detail view
+    const dataContainer = document.createElement('div');
+    dataContainer.id = 'analysisDataStorage';
+    dataContainer.style.display = 'none';
+
+    codes.forEach(code => {
+        const usage = codeUsageMap[code.id] || [];
+        const el = document.createElement('div');
+        el.id = `data-${code.id}`;
+        el.dataset.usage = JSON.stringify(usage);
+        dataContainer.appendChild(el);
+    });
+    listContainer.appendChild(dataContainer);
 }
 
 // Toggle folder collapse/expand
@@ -5973,22 +6046,77 @@ window.toggleFolderCollapse = function (categoryId) {
     const content = folder.querySelector('.folder-content');
     const chevron = folder.querySelector('.folder-chevron');
 
-    if (content.style.display === 'none') {
+    const isCollapsed = content.style.display === 'none';
+
+    if (isCollapsed) {
+        // Expand
         content.style.display = 'block';
         if (chevron) chevron.style.transform = 'rotate(90deg)';
     } else {
+        // Collapse
         content.style.display = 'none';
         if (chevron) chevron.style.transform = 'rotate(0deg)';
     }
 };
 
-// Create subcategory
+// Create subcategory - uses custom modal
 window.createSubCategory = function (parentId) {
-    const name = prompt('Enter subcategory name:');
-    if (!name || !name.trim()) return;
+    // Create modal if it doesn't exist
+    let modal = document.getElementById('subcategoryModal');
+    if (!modal) {
+        modal = document.createElement('div');
+        modal.id = 'subcategoryModal';
+        modal.innerHTML = `
+            <div style="position: fixed; inset: 0; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; z-index: 10000;">
+                <div style="background: white; border-radius: 12px; padding: 1.5rem; width: 320px; box-shadow: 0 20px 40px rgba(0,0,0,0.2);">
+                    <h3 style="margin: 0 0 1rem 0; font-size: 1.1rem; color: #1e293b;">Create Subcategory</h3>
+                    <input type="text" id="subcategoryNameInput" placeholder="Enter name..." 
+                           style="width: 100%; padding: 0.75rem; border: 1px solid #e2e8f0; border-radius: 8px; font-size: 0.9rem; box-sizing: border-box; outline: none;"
+                           onfocus="this.style.borderColor='#ea580c'" onblur="this.style.borderColor='#e2e8f0'">
+                    <div style="display: flex; gap: 0.5rem; margin-top: 1rem; justify-content: flex-end;">
+                        <button onclick="closeSubcategoryModal()" style="padding: 0.5rem 1rem; background: #f1f5f9; border: none; border-radius: 6px; cursor: pointer; font-size: 0.85rem;">Cancel</button>
+                        <button onclick="confirmSubcategory()" style="padding: 0.5rem 1rem; background: #ea580c; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 0.85rem;">Create</button>
+                    </div>
+                </div>
+            </div>
+        `;
+        document.body.appendChild(modal);
+    }
+
+    modal.style.display = 'block';
+    modal.dataset.parentId = parentId;
+
+    const input = document.getElementById('subcategoryNameInput');
+    input.value = '';
+    setTimeout(() => input.focus(), 100);
+
+    // Enter key handler
+    input.onkeydown = (e) => {
+        if (e.key === 'Enter') confirmSubcategory();
+        if (e.key === 'Escape') closeSubcategoryModal();
+    };
+};
+
+window.closeSubcategoryModal = function () {
+    const modal = document.getElementById('subcategoryModal');
+    if (modal) modal.style.display = 'none';
+};
+
+window.confirmSubcategory = function () {
+    const modal = document.getElementById('subcategoryModal');
+    const input = document.getElementById('subcategoryNameInput');
+    const name = input.value.trim();
+    const parentId = modal.dataset.parentId;
+
+    if (!name) {
+        input.style.borderColor = '#ef4444';
+        return;
+    }
+
+    closeSubcategoryModal();
 
     window.saveCategoryToFirestore(currentProjectId, {
-        name: name.trim(),
+        name: name,
         parentId: parentId
     }).then(() => {
         showToast('Subcategory created');
@@ -5999,53 +6127,136 @@ window.createSubCategory = function (parentId) {
     });
 };
 
-// Initialize SortableJS for drag-drop
+// Initialize drag-drop for codes to folder headers
 function initSortableFolders() {
-    const containers = document.querySelectorAll('.sortable-codes');
+    // Make codes draggable
+    document.querySelectorAll('.code-item-draggable').forEach(code => {
+        code.setAttribute('draggable', 'true');
 
-    containers.forEach(container => {
-        if (container._sortable) container._sortable.destroy();
+        code.addEventListener('dragstart', (e) => {
+            e.dataTransfer.setData('text/plain', code.dataset.codeId);
+            e.dataTransfer.effectAllowed = 'move';
+            code.classList.add('dragging');
 
-        container._sortable = new Sortable(container, {
-            group: 'codes',
-            animation: 150,
-            ghostClass: 'sortable-ghost',
-            chosenClass: 'sortable-chosen',
-            dragClass: 'sortable-drag',
-            handle: '.code-item-draggable',
-            filter: '.folder-item', // Don't drag folders, only codes
-            onEnd: async function (evt) {
-                const codeId = evt.item.dataset.codeId;
-                const newCategoryId = evt.to.dataset.categoryId;
+            // Highlight all folder headers as drop targets
+            document.querySelectorAll('.folder-header').forEach(h => {
+                h.classList.add('drop-target');
+            });
+        });
 
-                if (!codeId) return;
+        code.addEventListener('dragend', () => {
+            code.classList.remove('dragging');
+            // Remove highlights
+            document.querySelectorAll('.folder-header').forEach(h => {
+                h.classList.remove('drop-target', 'drop-hover');
+            });
+        });
+    });
 
-                console.log('Moving code', codeId, 'to category', newCategoryId);
+    // Make folder headers accept drops
+    // Make ENTIRE folder item accept drops (better UX)
+    document.querySelectorAll('.folder-item').forEach(folder => {
+        const categoryId = folder.dataset.categoryId;
+        if (!categoryId) return;
 
-                try {
-                    const targetCatId = newCategoryId === 'uncategorized' ? null : newCategoryId;
-                    await window.updateCodeCategory(currentProjectId, codeId, targetCatId);
-                    showToast('Code moved');
-                } catch (e) {
-                    console.error('Failed to move code:', e);
-                    showToast('Failed to move code', 'error');
-                    // Refresh to restore original state
-                    openAnalysisPage(currentProjectId);
+        folder.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            e.stopPropagation(); // Prevent parent folders from triggering
+            e.dataTransfer.dropEffect = 'move';
+
+            // Visual feedback on the header
+            const header = folder.querySelector('.folder-header');
+            if (header) header.classList.add('drop-hover');
+        });
+
+        folder.addEventListener('dragleave', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+
+            // Only remove if we really left the folder (not just moved to a child)
+            // But dragleave fires when entering a child. 
+            // Better strategy: Remove logic here, relying on the 'drop-hover' removal in drop/end
+            // OR check relatedTarget
+
+            const header = folder.querySelector('.folder-header');
+            // Simple approach: Only remove if relatedTarget is NOT inside this folder
+            if (!folder.contains(e.relatedTarget)) {
+                if (header) header.classList.remove('drop-hover');
+            }
+        });
+
+        folder.addEventListener('drop', async (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+
+            const header = folder.querySelector('.folder-header');
+            if (header) header.classList.remove('drop-hover');
+
+            // Remove all drop targets
+            document.querySelectorAll('.folder-header').forEach(h => {
+                h.classList.remove('drop-target', 'drop-hover');
+            });
+
+            const codeId = e.dataTransfer.getData('text/plain');
+            console.log('Drop event - codeId:', codeId, 'targetCategory:', categoryId);
+
+            if (!codeId) {
+                console.error('No codeId in drop event');
+                return;
+            }
+
+            try {
+                // If dropping into same category, ignore
+                if (categoryId === 'uncategorized') {
+                    // Check current category logic if needed, but backend handles it
                 }
+
+                const targetCatId = categoryId === 'uncategorized' ? null : categoryId;
+                console.log('Updating code category:', currentProjectId, codeId, '->', targetCatId);
+                await window.updateCodeCategory(currentProjectId, codeId, targetCatId);
+                showToast('Code moved');
+                await openAnalysisPage(currentProjectId); // Refresh to show new position
+            } catch (err) {
+                console.error('Failed to move code:', err);
+                showToast('Failed to move code', 'error');
             }
         });
     });
 
-    // Add styles for sortable
-    if (!document.getElementById('sortableStyles')) {
+    // Add styles for drag-drop
+    if (!document.getElementById('dragDropStyles')) {
         const style = document.createElement('style');
-        style.id = 'sortableStyles';
+        style.id = 'dragDropStyles';
         style.textContent = `
-            .sortable-ghost { opacity: 0.4; background: #fef3c7 !important; }
-            .sortable-chosen { background: #fff7ed !important; }
-            .sortable-drag { opacity: 0.9; }
-            .code-item-draggable:hover { background: #f8fafc !important; border-color: #e2e8f0 !important; }
-            .folder-header:hover { background: #f1f5f9 !important; }
+            .folder-header * {
+                pointer-events: none;
+            }
+            .folder-header button {
+                pointer-events: auto !important;
+            }
+            .code-item-draggable { 
+                cursor: grab; 
+                transition: all 0.2s;
+            }
+            .code-item-draggable:hover { 
+                background: #f8fafc !important; 
+                border-color: #e2e8f0 !important; 
+            }
+            .code-item-draggable.dragging {
+                opacity: 0.5;
+                transform: scale(0.98);
+            }
+            .folder-header.drop-target {
+                border: 2px dashed #cbd5e1 !important;
+            }
+            .folder-header.drop-hover {
+                background: #fff7ed !important;
+                border: 2px dashed #ea580c !important;
+                transform: scale(1.02);
+            }
+            .folder-header:hover { 
+                background: #f1f5f9 !important; 
+            }
         `;
         document.head.appendChild(style);
     }
@@ -6265,36 +6476,35 @@ window.confirmDeleteCategory = function (categoryId) {
 
 window.renderAnalysisDetail = renderAnalysisDetail;
 
-function renderAnalysisDetail(codeId, name, color, startEl) {
-    // UI Selection State
-    document.querySelectorAll('.code-manager-item').forEach(el => {
-        el.style.background = 'transparent';
-        el.style.borderColor = 'transparent';
+function renderAnalysisDetail(codeId, name, color, startEl, usageDataOverride = null) {
+    // UI Selection State - handle both old and new code item structures
+    document.querySelectorAll('.code-manager-item, .code-item-draggable').forEach(el => {
+        el.style.background = '';
+        el.style.borderColor = '';
         el.classList.remove('active');
-        // Restore hover effect placeholder if needed, mostly handled by CSS
-        el.querySelector('.code-item-name').style.fontWeight = '500';
+        const nameEl = el.querySelector('.code-item-name');
+        if (nameEl) nameEl.style.fontWeight = '500';
     });
 
     if (startEl) {
         startEl.style.background = '#f8fafc';
         startEl.style.borderColor = '#e2e8f0';
         startEl.classList.add('active');
-        startEl.querySelector('.code-item-name').style.fontWeight = '700';
+        const nameEl = startEl.querySelector('.code-item-name');
+        if (nameEl) nameEl.style.fontWeight = '700';
     }
 
-    const dataEl = document.getElementById(`data-${codeId}`);
-    if (!dataEl) return;
-    const occurrences = JSON.parse(dataEl.dataset.usage || '[]');
-
-    document.getElementById('analysisDetailEmpty').classList.add('hidden');
-    const detailContent = document.getElementById('analysisDetailContent');
-    detailContent.classList.remove('hidden');
-
-    detailContent.dataset.currentCodeColor = color;
-    detailContent.dataset.currentCodeId = codeId;
+    let occurrences = [];
+    if (usageDataOverride) {
+        occurrences = usageDataOverride;
+    } else {
+        const dataEl = document.getElementById(`data-${codeId}`);
+        if (!dataEl) return;
+        occurrences = JSON.parse(dataEl.dataset.usage || '[]');
+    }
 
     // Header Design
-    detailContent.innerHTML = `
+    const headerHtml = `
         <div style="margin-bottom: 0rem;">
             <div style="display: flex; justify-content: space-between; align-items: flex-start;">
                 <div style="display: flex; gap: 1rem; align-items: center;">
@@ -6307,9 +6517,9 @@ function renderAnalysisDetail(codeId, name, color, startEl) {
                             <span class="badge" style="background: ${color}15; color: ${color}; border: 1px solid ${color}30; font-weight: 600; padding: 0.2rem 0.6rem; border-radius: 6px; font-size: 0.8rem;">${occurrences.length} instances</span>
                             <span style="width: 4px; height: 4px; background: #cbd5e1; border-radius: 50%;"></span>
                             <span style="color: var(--text-muted); font-size: 0.9rem;">Used across ${new Set(occurrences.map(o => o.interviewId)).size} transcripts</span>
-                            <div id="rel-count-badge" style="display: flex; align-items: center; gap: 0.4rem; font-size: 0.8rem; color: var(--text-muted); margin-left: 0.5rem;">
+                            <div class="rel-count-badge" style="display: flex; align-items: center; gap: 0.4rem; font-size: 0.8rem; color: var(--text-muted); margin-left: 0.5rem;">
                                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg>
-                                <span id="rel-count-text">Loading...</span>
+                                <span class="rel-count-text">Loading...</span>
                             </div>
                         </div>
                     </div>
@@ -6335,24 +6545,44 @@ function renderAnalysisDetail(codeId, name, color, startEl) {
             </div>
         </div>
 
-        <div id="analysisSegmentsContainer" class="tab-content" style="flex: 1; overflow-y: auto;">
+        <div class="tab-content analysis-segments-container" style="flex: 1; overflow-y: auto;">
              <!-- Segments injected below -->
         </div>
         
-        <div id="analysisAxialContainer" class="tab-content hidden" style="flex: 1; overflow-y: auto;">
+        <div class="tab-content analysis-axial-container hidden" style="flex: 1; overflow-y: auto;">
              <!-- Relationships injected here -->
         </div>
 
-        <div id="analysisGraphContainer" class="tab-content hidden" style="flex: 1; background: #f8fafc; border-radius: 12px; border: 1px solid #e2e8f0; position: relative;">
+        <div class="tab-content analysis-graph-container hidden" style="flex: 1; background: #f8fafc; border-radius: 12px; border: 1px solid #e2e8f0; position: relative;">
             <div id="network-graph" style="width: 100%; height: 100%;"></div>
         </div>
     `;
 
+    // DETERMINE TARGET CONTAINER
+    let contentId = 'analysisDetailContent';
+    let emptyId = 'analysisDetailEmpty';
+    if (usageDataOverride) {
+        contentId = 'codeManagerDetailContent';
+        emptyId = 'codeManagerDetailEmpty';
+    }
+
+    const detailContent = document.getElementById(contentId);
+    if (detailContent) {
+        document.getElementById(emptyId)?.classList.add('hidden');
+        detailContent.classList.remove('hidden');
+        detailContent.dataset.currentCodeId = codeId;
+        detailContent.dataset.currentCodeColor = color;
+        detailContent.innerHTML = headerHtml;
+    } else {
+        return; // Should not happen
+    }
+
+    // SCOPED SELECTION for Inner Containers
+    const segmentsContainer = detailContent.querySelector('.analysis-segments-container');
 
     // Grouping Logic
-    const container = document.getElementById('analysisSegmentsContainer');
     if (occurrences.length === 0) {
-        container.innerHTML = `
+        segmentsContainer.innerHTML = `
             <div style="text-align: center; padding: 4rem 2rem; background: #f8fafc; border: 2px dashed #e2e8f0; border-radius: 12px; color: var(--text-muted); margin-top: 2rem;">
                 <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="margin-bottom: 1rem; opacity: 0.5;"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
                 <p style="margin: 0; font-weight: 500;">No coded segments found for this code.</p>
@@ -6370,7 +6600,7 @@ function renderAnalysisDetail(codeId, name, color, startEl) {
         return acc;
     }, {});
 
-    const html = Object.keys(grouped).map(interviewId => {
+    const segsHtml = Object.keys(grouped).map(interviewId => {
         const group = grouped[interviewId];
         return `
             <div style="margin-bottom: 2.5rem; animation: slideUp 0.3s ease-out;">
@@ -6378,7 +6608,7 @@ function renderAnalysisDetail(codeId, name, color, startEl) {
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color: var(--text-muted);"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
                     <h4 style="margin: 0; font-size: 0.95rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em;">${escapeHtml(group.title)}</h4>
                     <span style="font-size: 0.8rem; background: #f1f5f9; padding: 0.1rem 0.5rem; border-radius: 10px; color: var(--text-muted);">${group.segments.length} instance${group.segments.length !== 1 ? 's' : ''}</span>
-                    <button onclick="document.getElementById('analysisView').classList.add('hidden'); window.openReview('${interviewId}');" style="margin-left: auto; background: transparent; border: none; font-size: 0.8rem; font-weight: 600; color: var(--brand-primary); cursor: pointer; display: flex; align-items: center; gap: 4px;">
+                    <button onclick="document.getElementById('analysisView').classList.add('hidden'); document.getElementById('codeManagerModal').classList.add('hidden'); window.openReview('${interviewId}');" style="margin-left: auto; background: transparent; border: none; font-size: 0.8rem; font-weight: 600; color: var(--brand-primary); cursor: pointer; display: flex; align-items: center; gap: 4px;">
                         Go to transcript <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg>
                     </button>
                 </div>
@@ -6395,10 +6625,10 @@ function renderAnalysisDetail(codeId, name, color, startEl) {
         `;
     }).join('');
 
-    container.innerHTML = html;
+    segmentsContainer.innerHTML = segsHtml;
 
     // Add hover effects via JS for now (or CSS later)
-    container.querySelectorAll('.analysis-segment-card').forEach(card => {
+    segmentsContainer.querySelectorAll('.analysis-segment-card').forEach(card => {
         card.addEventListener('mouseenter', () => {
             card.style.transform = 'translateY(-2px)';
             card.style.boxShadow = '0 4px 12px rgba(0,0,0,0.05)';
@@ -6417,31 +6647,37 @@ window.switchAnalysisTab = function (tabName) {
     document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
     document.querySelectorAll('.analysis-tab').forEach(el => {
         el.classList.remove('active');
+        el.style.borderBottomColor = 'transparent';
         el.style.color = 'var(--text-muted)';
         el.style.fontWeight = '500';
-        el.style.borderBottomColor = 'transparent';
     });
 
     const activeTab = document.getElementById(`tab-${tabName}`);
     if (activeTab) {
         activeTab.classList.add('active');
+        activeTab.style.borderBottomColor = 'var(--brand-primary)';
         activeTab.style.color = 'var(--brand-primary)';
         activeTab.style.fontWeight = '700';
-        activeTab.style.borderBottomColor = 'var(--brand-primary)';
     }
 
-    if (tabName === 'data') {
-        document.getElementById('analysisSegmentsContainer').classList.remove('hidden');
-    } else if (tabName === 'axial') {
-        document.getElementById('analysisAxialContainer').classList.remove('hidden');
-    } else if (tabName === 'graph') {
-        document.getElementById('analysisGraphContainer').classList.remove('hidden');
-        const detailContent = document.getElementById('analysisDetailContent');
-        if (detailContent) {
-            renderNetworkGraph(detailContent.dataset.currentCodeId);
-        }
+    // Determine target container (Modal or Page) based on visibility
+    let parent = document.getElementById('analysisDetailContent');
+    if (!parent || parent.classList.contains('hidden')) {
+        parent = document.getElementById('codeManagerDetailContent');
     }
-};
+
+    if (!parent) return;
+
+    if (tabName === 'data') {
+        parent.querySelector('.analysis-segments-container')?.classList.remove('hidden');
+    } else if (tabName === 'axial') {
+        parent.querySelector('.analysis-axial-container')?.classList.remove('hidden');
+    } else if (tabName === 'graph') {
+        parent.querySelector('.analysis-graph-container')?.classList.remove('hidden');
+        renderNetworkGraph(parent.dataset.currentCodeId);
+    }
+}
+
 
 async function renderAxialConnections(codeId) {
     const container = document.getElementById('analysisAxialContainer');
