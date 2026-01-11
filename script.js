@@ -5799,12 +5799,20 @@ window.openCodeUsageModal = async function (projectId, codeId) {
     }
 
     try {
-        // 4. Fetch Data
-        const codes = await window.loadCodesForProject(projectId);
+        // 4. Fetch Data - Parallel load for speed
+        const [codes, allSegments, categories] = await Promise.all([
+            window.loadCodesForProject(projectId),
+            window.getAllCodedSegments(projectId),
+            window.loadCategoriesForProject(projectId)
+        ]);
+
+        // Store for global access (so menus/axial logic can use them)
+        window.currentAnalysisCategories = categories;
+        window.currentProjectCodes = codes;
+
         const code = codes.find(c => c.id === codeId);
         if (!code) throw new Error('Code not found');
 
-        const allSegments = await window.getAllCodedSegments(projectId);
         const usage = allSegments.filter(s => s.codeId === codeId);
 
         // 5. Render
@@ -5984,7 +5992,7 @@ function renderAnalysisSidebar(codes, categories, codeUsageMap) {
         return `
             <div class="code-item-draggable" data-code-id="${code.id}" 
                  onclick="window.renderAnalysisDetail('${code.id}', '${escapeHtml(code.name)}', '${code.color}', this)"
-                 style="display: flex; align-items: center; gap: 0.5rem; padding: 0.5rem 0.75rem; background: white; border-radius: 6px; cursor: pointer; margin-bottom: 4px; border: 1px solid #f1f5f9; transition: all 0.2s;">
+                 style="display: flex; align-items: center; gap: 0.5rem; padding: 0.5rem 0.75rem; background: white; border-radius: 6px; cursor: pointer; margin-bottom: 4px; border: 1px solid transparent; transition: all 0.2s;">
                 <div style="background: ${code.color}; width: 10px; height: 10px; border-radius: 50%;"></div>
                 <span style="font-size: 0.85rem; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${escapeHtml(code.name)}</span>
                 <span style="font-size: 0.7rem; color: #94a3b8;">${usage.length}</span>
@@ -5993,6 +6001,13 @@ function renderAnalysisSidebar(codes, categories, codeUsageMap) {
 
     // Build the HTML
     let html = '';
+
+    // Sort root categories by order (descending) so new ones (higher timestamp) are on top
+    rootCategories.sort((a, b) => {
+        const orderA = a.order !== undefined ? a.order : (a.createdAt ? a.createdAt.seconds || 0 : 0);
+        const orderB = b.order !== undefined ? b.order : (b.createdAt ? b.createdAt.seconds || 0 : 0);
+        return orderB - orderA;
+    });
 
     // Render root categories first
     rootCategories.forEach(cat => {
@@ -6154,6 +6169,33 @@ function initSortableFolders() {
     });
 
     // Make folder headers accept drops
+    // Category Reordering Draggable Logic
+    document.querySelectorAll('.folder-item').forEach(folder => {
+        const header = folder.querySelector('.folder-header');
+        if (!header) return;
+
+        // Make draggable
+        header.setAttribute('draggable', 'true');
+
+        header.addEventListener('dragstart', (e) => {
+            e.stopPropagation(); // Don't trigger parent drag
+            const catId = folder.dataset.categoryId;
+            e.dataTransfer.setData('application/x-vibe-category', catId);
+            e.dataTransfer.effectAllowed = 'move';
+            folder.classList.add('dragging-folder');
+            document.body.classList.add('dragging-category-active');
+        });
+
+        header.addEventListener('dragend', (e) => {
+            e.stopPropagation();
+            folder.classList.remove('dragging-folder');
+            document.body.classList.remove('dragging-category-active');
+            document.querySelectorAll('.folder-item').forEach(f => {
+                f.classList.remove('drop-target-category-above', 'drop-target-category-below');
+            });
+        });
+    });
+
     // Make ENTIRE folder item accept drops (better UX)
     document.querySelectorAll('.folder-item').forEach(folder => {
         const categoryId = folder.dataset.categoryId;
@@ -6164,24 +6206,34 @@ function initSortableFolders() {
             e.stopPropagation(); // Prevent parent folders from triggering
             e.dataTransfer.dropEffect = 'move';
 
-            // Visual feedback on the header
-            const header = folder.querySelector('.folder-header');
-            if (header) header.classList.add('drop-hover');
+            // Check if dragging a category or a code
+            const isCategoryDrag = document.body.classList.contains('dragging-category-active');
+
+            if (isCategoryDrag) {
+                // Category Reordering Logic
+                const rect = folder.getBoundingClientRect();
+                const midY = rect.top + rect.height / 2;
+                const isTop = e.clientY < midY;
+
+                folder.classList.remove('drop-target-category-above', 'drop-target-category-below');
+                if (isTop) folder.classList.add('drop-target-category-above');
+                else folder.classList.add('drop-target-category-below');
+
+            } else {
+                // Code Drop Logic (Visual feedback on header)
+                const header = folder.querySelector('.folder-header');
+                if (header) header.classList.add('drop-hover');
+            }
         });
 
         folder.addEventListener('dragleave', (e) => {
             e.preventDefault();
             e.stopPropagation();
 
-            // Only remove if we really left the folder (not just moved to a child)
-            // But dragleave fires when entering a child. 
-            // Better strategy: Remove logic here, relying on the 'drop-hover' removal in drop/end
-            // OR check relatedTarget
-
             const header = folder.querySelector('.folder-header');
-            // Simple approach: Only remove if relatedTarget is NOT inside this folder
             if (!folder.contains(e.relatedTarget)) {
                 if (header) header.classList.remove('drop-hover');
+                folder.classList.remove('drop-target-category-above', 'drop-target-category-below');
             }
         });
 
@@ -6191,17 +6243,44 @@ function initSortableFolders() {
 
             const header = folder.querySelector('.folder-header');
             if (header) header.classList.remove('drop-hover');
+            folder.classList.remove('drop-target-category-above', 'drop-target-category-below');
 
             // Remove all drop targets
             document.querySelectorAll('.folder-header').forEach(h => {
                 h.classList.remove('drop-target', 'drop-hover');
             });
 
+            // CHECK DATA TYPES
+            const draggedCategoryId = e.dataTransfer.getData('application/x-vibe-category');
+
+            if (draggedCategoryId) {
+                // HANDLE CATEGORY REORDERING
+                if (draggedCategoryId === categoryId) return; // Drop on self
+
+                // Calculate where we dropped (above or below)
+                // We need to fetch all categories to find the neighbors' values?
+                // Or just swapping?
+                // "Move Between": 
+                // We need to know who is Above and who is Below in the new state.
+                // Simpler: Just swap orders? No, that's brittle.
+                // Better: Get current order of target. 
+                // If dropped ABOVE: new order = (target.order + prev.order)/2 ?
+                // If dropped BELOW: new order = (target.order + next.order)/2 ?
+                // Since we don't have easy access to prev/next here in DOM...
+                // We will call a window function to handle the math.
+                const rect = folder.getBoundingClientRect();
+                const isTop = e.clientY < (rect.top + rect.height / 2);
+
+                console.log('Reorder Category:', draggedCategoryId, 'Target:', categoryId, 'Above:', isTop);
+                await window.reorderCategory(draggedCategoryId, categoryId, isTop);
+                return;
+            }
+
             const codeId = e.dataTransfer.getData('text/plain');
             console.log('Drop event - codeId:', codeId, 'targetCategory:', categoryId);
 
             if (!codeId) {
-                console.error('No codeId in drop event');
+                // console.error('No codeId in drop event'); // Allow fail silently for category drags
                 return;
             }
 
@@ -6240,7 +6319,7 @@ function initSortableFolders() {
             }
             .code-item-draggable:hover { 
                 background: #f8fafc !important; 
-                border-color: #e2e8f0 !important; 
+                border-color: transparent !important; 
             }
             .code-item-draggable.dragging {
                 opacity: 0.5;
@@ -6256,6 +6335,19 @@ function initSortableFolders() {
             }
             .folder-header:hover { 
                 background: #f1f5f9 !important; 
+            }
+            /* Category Dragging Styles */
+            .folder-item.drop-target-category-above {
+                border-top: 2px solid #ea580c !important;
+            }
+            .folder-item.drop-target-category-below {
+                border-bottom: 2px solid #ea580c !important;
+            }
+            .folder-header[draggable="true"] {
+                cursor: grab;
+            }
+            .dragging-folder {
+                opacity: 0.4;
             }
         `;
         document.head.appendChild(style);
@@ -6478,32 +6570,41 @@ window.renderAnalysisDetail = renderAnalysisDetail;
 
 function renderAnalysisDetail(codeId, name, color, startEl, usageDataOverride = null) {
     // UI Selection State - handle both old and new code item structures
-    document.querySelectorAll('.code-manager-item, .code-item-draggable').forEach(el => {
-        el.style.background = '';
-        el.style.borderColor = '';
-        el.classList.remove('active');
-        const nameEl = el.querySelector('.code-item-name');
+    // UI Selection State - Optimize to avoid O(N) loop
+    const previousActive = document.querySelector('.code-item-draggable.active');
+    if (previousActive) {
+        previousActive.style.background = '';
+        previousActive.style.borderColor = 'transparent';
+        previousActive.classList.remove('active');
+        const nameEl = previousActive.querySelector('.code-item-name');
         if (nameEl) nameEl.style.fontWeight = '500';
-    });
+    }
 
     if (startEl) {
-        startEl.style.background = '#f8fafc';
-        startEl.style.borderColor = '#e2e8f0';
+        startEl.style.background = '#f1f5f9';
+        startEl.style.borderColor = '#cbd5e1';
         startEl.classList.add('active');
         const nameEl = startEl.querySelector('.code-item-name');
         if (nameEl) nameEl.style.fontWeight = '700';
     }
 
-    let occurrences = [];
-    if (usageDataOverride) {
-        occurrences = usageDataOverride;
-    } else {
-        const dataEl = document.getElementById(`data-${codeId}`);
-        if (!dataEl) return;
-        occurrences = JSON.parse(dataEl.dataset.usage || '[]');
-    }
+    // Use setTimeout to defer heavy rendering and fix UI lag
+    setTimeout(() => {
+        let occurrences = [];
+        if (usageDataOverride) {
+            occurrences = usageDataOverride;
+        } else {
+            const dataEl = document.getElementById(`data-${codeId}`);
+            if (!dataEl) return;
+            occurrences = JSON.parse(dataEl.dataset.usage || '[]');
+        }
 
-    // Header Design
+        renderAnalysisContent(codeId, name, color, occurrences, !!usageDataOverride);
+    }, 10);
+}
+
+// Split rendering into a helper to keep code clean
+function renderAnalysisContent(codeId, name, color, occurrences, isModal = false) {
     const headerHtml = `
         <div style="margin-bottom: 0rem;">
             <div style="display: flex; justify-content: space-between; align-items: flex-start;">
@@ -6519,7 +6620,7 @@ function renderAnalysisDetail(codeId, name, color, startEl, usageDataOverride = 
                             <span style="color: var(--text-muted); font-size: 0.9rem;">Used across ${new Set(occurrences.map(o => o.interviewId)).size} transcripts</span>
                             <div class="rel-count-badge" style="display: flex; align-items: center; gap: 0.4rem; font-size: 0.8rem; color: var(--text-muted); margin-left: 0.5rem;">
                                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg>
-                                <span class="rel-count-text">Loading...</span>
+                                <span id="rel-count-text" class="rel-count-text">Loading...</span>
                             </div>
                         </div>
                     </div>
@@ -6549,7 +6650,7 @@ function renderAnalysisDetail(codeId, name, color, startEl, usageDataOverride = 
              <!-- Segments injected below -->
         </div>
         
-        <div class="tab-content analysis-axial-container hidden" style="flex: 1; overflow-y: auto;">
+        <div id="analysisAxialContainer" class="tab-content analysis-axial-container hidden" style="flex: 1; overflow-y: auto;">
              <!-- Relationships injected here -->
         </div>
 
@@ -6561,7 +6662,7 @@ function renderAnalysisDetail(codeId, name, color, startEl, usageDataOverride = 
     // DETERMINE TARGET CONTAINER
     let contentId = 'analysisDetailContent';
     let emptyId = 'analysisDetailEmpty';
-    if (usageDataOverride) {
+    if (isModal) {
         contentId = 'codeManagerDetailContent';
         emptyId = 'codeManagerDetailEmpty';
     }
@@ -6994,3 +7095,56 @@ async function performDeleteCode(codeId) {
         showToast('Delete failed', 'error');
     }
 }
+
+// Category Reordering Logic
+window.reorderCategory = async function (draggedId, targetId, isAbove) {
+    if (!draggedId || !targetId || draggedId === targetId) return;
+    if (!window.loadCategoriesForProject || !currentProjectId) return;
+
+    try {
+        const categories = await window.loadCategoriesForProject(currentProjectId);
+
+        // Root categories only for now (nested reordering is more complex)
+        const rootCats = categories.filter(c => !c.parentId);
+
+        rootCats.sort((a, b) => {
+            const orderA = a.order !== undefined ? a.order : (a.createdAt ? a.createdAt.seconds || 0 : 0);
+            const orderB = b.order !== undefined ? b.order : (b.createdAt ? b.createdAt.seconds || 0 : 0);
+            return orderB - orderA;
+        });
+
+        const draggedIndex = rootCats.findIndex(c => c.id === draggedId);
+        const targetIndex = rootCats.findIndex(c => c.id === targetId);
+
+        if (targetIndex === -1) return;
+
+        const targetOrder = rootCats[targetIndex].order !== undefined ? rootCats[targetIndex].order : (rootCats[targetIndex].createdAt ? rootCats[targetIndex].createdAt.seconds * 1000 : Date.now());
+
+        let newOrder;
+        if (isAbove) {
+            const prevItem = rootCats[targetIndex - 1];
+            if (prevItem && prevItem.id === draggedId) return;
+            if (!prevItem) newOrder = targetOrder + 1000000;
+            else {
+                const prevOrder = prevItem.order !== undefined ? prevItem.order : (prevItem.createdAt ? prevItem.createdAt.seconds * 1000 : Date.now());
+                newOrder = (targetOrder + prevOrder) / 2;
+            }
+        } else {
+            const nextItem = rootCats[targetIndex + 1];
+            if (nextItem && nextItem.id === draggedId) return;
+            if (!nextItem) newOrder = targetOrder - 1000000;
+            else {
+                const nextOrder = nextItem.order !== undefined ? nextItem.order : (nextItem.createdAt ? nextItem.createdAt.seconds * 1000 : 0);
+                newOrder = (targetOrder + nextOrder) / 2;
+            }
+        }
+
+        await db.collection('projects').doc(currentProjectId).collection('categories').doc(draggedId).update({
+            order: newOrder
+        });
+
+        openAnalysisPage(currentProjectId);
+    } catch (e) {
+        console.error("Reorder failed", e);
+    }
+};

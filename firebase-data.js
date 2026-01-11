@@ -882,15 +882,17 @@ window.getAllCodedSegments = async function (projectId) {
 
             // Find speaker for the segment
             let speaker = 'Unknown';
+            let seg = null;
             if (interview.transcriptSegments && Array.isArray(interview.transcriptSegments)) {
-                const seg = interview.transcriptSegments.find(s => s.id === attr.segmentId);
+                seg = interview.transcriptSegments.find(s => s.id === attr.segmentId);
                 if (seg) speaker = seg.speaker || 'Unknown';
             }
 
             allCodedSegments.push({
                 codeId: attr.codeId,
                 segmentId: attr.segmentId,
-                segmentText: attr.text || ' (No text captured) ',
+                text: seg ? (seg.text || '') : (attr.text || ''), // Fix: use transcript text, fallback to attr
+                segmentText: seg ? (seg.text || '') : (attr.text || ''), // Alias for safety
                 segmentSpeaker: speaker,
                 interviewId: attr.interviewId,
                 interviewTitle: interview.title || 'Untitled Interview',
@@ -920,7 +922,11 @@ window.saveCategoryToFirestore = async function (projectId, categoryData) {
             parentId: categoryData.parentId || null, // For subcategory hierarchy
             userId: currentUser.uid,
             createdAt: firebase.firestore.FieldValue.serverTimestamp(),
-            updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+            updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+            // Order: Default to current timestamp for new items.
+            // We will sort DESCENDING (higher timestamp = newer = top) by default.
+            // Drag & drop will adjust this value.
+            order: Date.now()
         };
         await catRef.set(category);
         console.log('Category saved with parentId:', category.parentId);
