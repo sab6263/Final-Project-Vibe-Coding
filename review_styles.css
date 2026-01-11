@@ -243,7 +243,7 @@
     display: flex;
     align-items: center;
     gap: 0.75rem;
-    transition: opacity 0.2s, transform 0.2s;
+    transition: opacity 0.1s, transform 0.1s, top 0.1s;
 }
 
 .global-tooltip.hidden {

@@ -1677,10 +1677,17 @@ input:checked+.slider:before {
     /* Enable interaction */
     box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
     opacity: 0;
-    transition: opacity 0.2s, top 0.2s;
+    transition: opacity 0.1s, transform 0.1s, top 0.1s;
     display: flex;
     align-items: center;
     gap: 0.5rem;
+    transform: translateY(0);
+}
+
+.global-tooltip.hidden {
+    opacity: 0;
+    pointer-events: none;
+    transform: translateY(5px);
 }
 
 .global-tooltip.visible {

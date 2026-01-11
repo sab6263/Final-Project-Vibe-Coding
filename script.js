@@ -3268,6 +3268,7 @@ function escapeHtml(text) {
 let globalTooltip = null;
 let globalTooltipTimeout = null;
 let isHoveringGlobalTooltip = false;
+let globalTooltipHideStage2 = null;
 
 function showGlobalTooltip(target) {
     if (!globalTooltip) return;
@@ -3276,6 +3277,7 @@ function showGlobalTooltip(target) {
     const note = target.dataset.note || target.getAttribute('data-note');
     if (note) {
         clearTimeout(globalTooltipTimeout);
+        clearTimeout(globalTooltipHideStage2);
 
         // Update content
         const segmentId = target.dataset.segmentId;
@@ -3291,6 +3293,8 @@ function showGlobalTooltip(target) {
             deleteBtn.onclick = (ev) => {
                 ev.stopPropagation();
                 deleteInlineNote(segmentId, highlightStart);
+                clearTimeout(globalTooltipTimeout);
+                clearTimeout(globalTooltipHideStage2);
                 globalTooltip.classList.remove('visible');
                 globalTooltip.classList.add('hidden');
             };
@@ -3327,9 +3331,11 @@ function hideGlobalTooltip() {
     globalTooltipTimeout = setTimeout(() => {
         if (!isHoveringGlobalTooltip) {
             globalTooltip.classList.remove('visible');
-            setTimeout(() => globalTooltip.classList.add('hidden'), 200);
+            globalTooltipHideStage2 = setTimeout(() => {
+                globalTooltip.classList.add('hidden');
+            }, 200);
         }
-    }, 3000);
+    }, 1000);
 }
 
 function initGlobalTooltip() {
@@ -5867,12 +5873,18 @@ async function openAnalysisPage(projectId, initialCodeId = null) {
         console.error("CRITICAL: analysisCodesList not found in openAnalysisPage!");
     }
 
-    // Clear Detail View
-    const emptyState = document.getElementById('codeManagerDetailEmpty');
-    const contentState = document.getElementById('codeManagerDetailContent');
+    // Clear Detail View (both Modal and Main Analysis View)
+    const emptyStates = ['codeManagerDetailEmpty', 'analysisDetailEmpty'];
+    const contentStates = ['codeManagerDetailContent', 'analysisDetailContent'];
 
-    if (emptyState) emptyState.classList.remove('hidden');
-    if (contentState) contentState.classList.add('hidden');
+    emptyStates.forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.classList.remove('hidden');
+    });
+    contentStates.forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.classList.add('hidden');
+    });
 
     // Clear selection state
     document.querySelectorAll('.code-manager-item').forEach(el => el.classList.remove('active'));
@@ -6998,6 +7010,15 @@ async function performDeleteCode(codeId) {
     try {
         await window.deleteCodeFromFirestore(currentProjectId, codeId);
         showToast('Code deleted');
+
+        // Close any open code modals
+        if (typeof closeCodeModal === 'function') closeCodeModal();
+
+        // Also close the usage/manager modal if it's open
+        const managerModal = document.getElementById('codeManagerModal');
+        if (managerModal && !managerModal.classList.contains('hidden')) {
+            managerModal.classList.add('hidden');
+        }
 
         // 1. Refresh global project code list
         await renderCodesList(currentProjectId);
