@@ -16,7 +16,7 @@ Contexture is designed to work immediately after cloning.
     ```
 
 2.  **How to run**:
-    *   **The Easy Way**: Just open `auth.html` directly in Google Chrome (Double-click the file).
+    *   **The Easy Way**: Just open `auth.html` directly in Google Chrome.
     *   **The Best Way**: For the most stable microphone experience, run a local server:
         ```bash
         npm install
