@@ -949,12 +949,27 @@ window.loadCategoriesForProject = async function (projectId) {
  * Update a code's category
  */
 window.updateCodeCategory = async function (projectId, codeId, categoryId) {
-    if (!currentUser || !projectId) return;
+    console.log("updateCodeCategory called:", { projectId, codeId, categoryId });
+    if (!currentUser) {
+        console.error("No current user");
+        return;
+    }
+    if (!projectId) {
+        console.error("No projectId");
+        return;
+    }
+    if (!codeId) {
+        console.error("No codeId");
+        return;
+    }
     try {
-        await db.collection('projects').doc(projectId).collection('codes').doc(codeId).update({
-            categoryId: categoryId,
+        const updateData = {
+            categoryId: categoryId || null,
             updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-        });
+        };
+        console.log("Updating code with:", updateData);
+        await db.collection('projects').doc(projectId).collection('codes').doc(codeId).update(updateData);
+        console.log("Code category updated successfully");
     } catch (error) {
         console.error('Error updating code category:', error);
         throw error;

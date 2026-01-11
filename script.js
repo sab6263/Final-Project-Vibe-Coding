@@ -842,9 +842,18 @@ const cancelCategoryBtn = document.getElementById('cancelCategoryBtn');
 const saveCategoryBtn = document.getElementById('saveCategoryBtn');
 
 if (createCategoryBtn) {
+    console.log("Attaching click listener to createCategoryBtn");
     createCategoryBtn.addEventListener('click', () => {
-        if (currentProjectId) openCategoryModal(currentProjectId);
+        console.log("Create Category Clicked. Current Project:", currentProjectId);
+        if (currentProjectId) {
+            openCategoryModal(currentProjectId);
+        } else {
+            console.error("No current project ID");
+            showToast("Error: No active project", "error");
+        }
     });
+} else {
+    console.error("createCategoryBtn element not found in DOM");
 }
 if (closeCategoryModalBtn) closeCategoryModalBtn.onclick = closeCategoryModal;
 if (cancelCategoryBtn) cancelCategoryBtn.onclick = closeCategoryModal;
@@ -3748,7 +3757,26 @@ function setupReviewModeListeners() {
             if (currentProjectId) {
                 openCodeModal(currentProjectId);
             }
-        };
+        }
+    }
+}
+
+/**
+ * Handle clicking on a pending highlight to remove it
+ */
+function handleRemovePendingHighlight(event) {
+    if (event.target.classList.contains('code-pending-highlight')) {
+        const span = event.target;
+        const parent = span.parentNode;
+
+        // Unwrap the content
+        while (span.firstChild) {
+            parent.insertBefore(span.firstChild, span);
+        }
+        parent.removeChild(span);
+        parent.normalize(); // Merge adjacent text nodes
+
+        showToast('Highlight removed', 'info');
     }
 }
 
@@ -3763,12 +3791,14 @@ function enableTextSelection() {
     reviewFeed.removeEventListener('mouseup', handleTextSelectionForCoding);
     reviewFeed.removeEventListener('dragover', handleDragOver);
     reviewFeed.removeEventListener('drop', handleCodeDrop);
+    reviewFeed.removeEventListener('click', handleRemovePendingHighlight);
 
     if (reviewCodingMode) {
         // Add selection and drag & drop handlers
         reviewFeed.addEventListener('mouseup', handleTextSelectionForCoding);
         reviewFeed.addEventListener('dragover', handleDragOver);
         reviewFeed.addEventListener('drop', handleCodeDrop);
+        reviewFeed.addEventListener('click', handleRemovePendingHighlight);
     }
 }
 
@@ -4748,12 +4778,12 @@ function initDragAndDrop() {
     let currentDragType = null;
 
     document.addEventListener('dragstart', (e) => {
-        if (e.target.classList.contains('draggable-label')) {
+        if (e.target && e.target.classList && e.target.classList.contains('draggable-label')) {
             e.dataTransfer.setData('speaker', e.target.getAttribute('data-speaker'));
             e.dataTransfer.setData('type', 'speaker');
             e.dataTransfer.effectAllowed = 'copy';
             currentDragType = 'speaker';
-        } else if (e.target.id === 'draggableNoteStick') {
+        } else if (e.target && e.target.id === 'draggableNoteStick') {
             const content = revNoteInput.value.trim();
             if (!content) {
                 e.preventDefault();
@@ -5795,6 +5825,23 @@ async function openAnalysisPage(projectId, initialCodeId = null) {
                 }, 100);
             }
         }
+
+        // Ensure Category Button is clickable (Fix for potential listener issues)
+        // Ensure Category Button is clickable (Fix for potential listener issues)
+        const catBtn = document.getElementById('createCategoryBtn');
+        if (catBtn) {
+            // Remove old listeners (cloning node is a clean way to do this if we want to reset entirely, 
+            // but let's just re-assign onclick for simplicity as it overrides)
+            console.log("Re-binding Create Category Button for project:", projectId);
+            catBtn.onclick = function (e) {
+                e.preventDefault();
+                e.stopPropagation();
+                console.log("Create Category Clicked (Dynamic Bind). Project:", projectId);
+                openCategoryModal(projectId);
+            };
+        } else {
+            console.error("CRITICAL: createCategoryBtn not found in DOM during openAnalysisPage");
+        }
     } catch (error) {
         console.error("Error loading analysis page:", error);
         listContainer.innerHTML = '<div style="color: #ef4444; padding: 1rem; text-align: center;">Error loading data.</div>';
@@ -5814,92 +5861,214 @@ function renderAnalysisSidebar(codes, categories, codeUsageMap) {
         return;
     }
 
-    // Grouping logic
-    const categoryGroups = {};
+    // Build category tree (support for hierarchy)
+    const categoryMap = {};
     categories.forEach(cat => {
-        categoryGroups[cat.id] = { ...cat, codes: [] };
+        categoryMap[cat.id] = { ...cat, codes: [], children: [], collapsed: false };
     });
-    categoryGroups['uncategorized'] = { name: 'Uncategorized', codes: [] };
 
+    // Group codes by category
+    const uncategorizedCodes = [];
     codes.forEach(code => {
-        const catId = code.categoryId || 'uncategorized';
-        if (!categoryGroups[catId]) categoryGroups['uncategorized'].codes.push(code);
-        else categoryGroups[catId].codes.push(code);
+        const catId = code.categoryId;
+        if (catId && categoryMap[catId]) {
+            categoryMap[catId].codes.push(code);
+        } else {
+            uncategorizedCodes.push(code);
+        }
     });
 
-    let mainHtml = '';
+    // Build hierarchy (categories with parentId)
+    const rootCategories = [];
+    Object.values(categoryMap).forEach(cat => {
+        if (cat.parentId && categoryMap[cat.parentId]) {
+            categoryMap[cat.parentId].children.push(cat);
+        } else {
+            rootCategories.push(cat);
+        }
+    });
 
-    // Render Categorized
-    Object.values(categoryGroups).forEach(group => {
-        if (group.codes.length === 0 && group.id === 'uncategorized') return;
+    // Render function for a category (recursive for hierarchy)
+    function renderCategory(cat, level = 0) {
+        const indent = level * 16;
+        const hasChildren = cat.children.length > 0 || cat.codes.length > 0;
+        const categoryCodeCount = cat.codes.length + cat.children.reduce((sum, c) => sum + c.codes.length, 0);
 
-        mainHtml += `
-            <div class="category-group" style="margin-bottom: 1rem;">
-                <div style="display: flex; align-items: center; justify-content: space-between; padding: 0.5rem 0.75rem; background: #f8fafc; border-radius: 6px; margin-bottom: 0.5rem;">
-                    <div style="display: flex; align-items: center; gap: 0.5rem;">
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color: var(--text-muted);"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline></svg>
-                        <span style="font-size: 0.75rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted);">${escapeHtml(group.name)}</span>
-                    </div>
-                    ${group.id !== 'uncategorized' ? `
-                    <button onclick="confirmDeleteCategory('${group.id}')" style="background: none; border: none; padding: 2px; color: #ef4444; opacity: 0; transition: opacity 0.2s; cursor: pointer;" class="category-delete-btn">
-                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2-2v2"></path></svg>
+        let html = `
+            <div class="folder-item" data-category-id="${cat.id}" data-level="${level}" style="margin-left: ${indent}px;">
+                <div class="folder-header" onclick="toggleFolderCollapse('${cat.id}')" 
+                     style="display: flex; align-items: center; gap: 0.5rem; padding: 0.5rem 0.75rem; background: ${level === 0 ? '#f8fafc' : '#ffffff'}; border-radius: 6px; cursor: pointer; margin-bottom: 4px; border: 1px solid #e2e8f0; transition: all 0.2s;">
+                    <svg class="folder-chevron" data-cat-id="${cat.id}" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="2" style="transition: transform 0.2s; ${hasChildren ? '' : 'visibility: hidden;'}">
+                        <polyline points="9 18 15 12 9 6"></polyline>
+                    </svg>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="#ea580c" stroke="#ea580c" stroke-width="1">
+                        <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
+                    </svg>
+                    <span style="font-weight: 600; font-size: 0.85rem; flex: 1;">${escapeHtml(cat.name)}</span>
+                    <span style="font-size: 0.7rem; color: #94a3b8;">(${categoryCodeCount})</span>
+                    ${level < 2 ? `<button onclick="event.stopPropagation(); createSubCategory('${cat.id}')" style="background: none; border: none; padding: 2px; color: #94a3b8; cursor: pointer;" title="Add subcategory">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
                     </button>` : ''}
+                    <button onclick="event.stopPropagation(); confirmDeleteCategory('${cat.id}')" style="background: none; border: none; padding: 2px; color: #94a3b8; cursor: pointer;" title="Delete">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+                    </button>
                 </div>
-                <div class="category-codes-list" style="display: flex; flex-direction: column; gap: 4px;">
-                    ${group.codes.map(code => {
-            const usage = codeUsageMap[code.id] || [];
-            const usageData = JSON.stringify(usage).replace(/"/g, '&quot;');
-            return `
-                        <div class="code-manager-item code-item" 
-                             id="analysis-code-item-${code.id}"
-                             data-code-name="${escapeHtml(code.name)}"
-                             data-code-color="${code.color}"
-                             onclick="window.renderAnalysisDetail('${code.id}', '${escapeHtml(code.name)}', '${code.color}', this)"
-                             style="position: relative; padding: 0.6rem 0.75rem; border-radius: 6px; border: 1px solid transparent; cursor: pointer; transition: all 0.2s; display: flex; align-items: center; gap: 0.75rem;">
-                            <div class="code-color-preview" style="background: ${code.color}; width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0;"></div>
-                            <span class="code-item-name" style="font-weight: 500; font-size: 0.85rem; color: var(--text-body); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 1;">${escapeHtml(code.name)}</span>
-                            <div id="data-${code.id}" style="display:none;" data-usage="${usageData}"></div>
-                            <span style="font-size: 0.7rem; color: var(--text-muted); font-weight: 500;">${usage.length}</span>
-                            
-                            <!-- Quick Categorize Trigger -->
-                            <button onclick="event.stopPropagation(); showCategorizeMenu(event, '${code.id}')" style="background: none; border: none; padding: 2px; color: var(--text-muted); opacity: 0; transition: opacity 0.2s;" class="code-action-btn">
-                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
-                            </button>
-                        </div>`;
-        }).join('')}
+                <div class="folder-content sortable-codes" data-category-id="${cat.id}" style="margin-left: 20px; display: block;">
+                    ${cat.codes.map(code => renderCodeItem(code, codeUsageMap)).join('')}
+                    ${cat.children.map(child => renderCategory(child, level + 1)).join('')}
                 </div>
             </div>`;
+        return html;
+    }
+
+    // Render a single code item
+    function renderCodeItem(code, usageMap) {
+        const usage = usageMap[code.id] || [];
+        return `
+            <div class="code-item-draggable" data-code-id="${code.id}" 
+                 onclick="window.renderAnalysisDetail('${code.id}', '${escapeHtml(code.name)}', '${code.color}', this)"
+                 style="display: flex; align-items: center; gap: 0.5rem; padding: 0.5rem 0.75rem; background: white; border-radius: 6px; cursor: pointer; margin-bottom: 4px; border: 1px solid #f1f5f9; transition: all 0.2s;">
+                <div style="background: ${code.color}; width: 10px; height: 10px; border-radius: 50%;"></div>
+                <span style="font-size: 0.85rem; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${escapeHtml(code.name)}</span>
+                <span style="font-size: 0.7rem; color: #94a3b8;">${usage.length}</span>
+            </div>`;
+    }
+
+    // Build the HTML
+    let html = '';
+
+    // Render root categories first
+    rootCategories.forEach(cat => {
+        html += renderCategory(cat, 0);
     });
 
-    listContainer.innerHTML = mainHtml;
+    // Render uncategorized codes at the bottom
+    if (uncategorizedCodes.length > 0) {
+        html += `
+            <div class="folder-item" data-category-id="uncategorized" style="margin-top: 1rem;">
+                <div class="folder-header" style="display: flex; align-items: center; gap: 0.5rem; padding: 0.5rem 0.75rem; background: #f1f5f9; border-radius: 6px; margin-bottom: 4px;">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="#94a3b8" stroke="#94a3b8" stroke-width="1">
+                        <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
+                    </svg>
+                    <span style="font-weight: 600; font-size: 0.85rem; color: #64748b; flex: 1;">Uncategorized</span>
+                    <span style="font-size: 0.7rem; color: #94a3b8;">(${uncategorizedCodes.length})</span>
+                </div>
+                <div class="folder-content sortable-codes" data-category-id="uncategorized" style="margin-left: 20px;">
+                    ${uncategorizedCodes.map(code => renderCodeItem(code, codeUsageMap)).join('')}
+                </div>
+            </div>`;
+    }
 
-    // Add styles for hover buttons
-    if (!document.getElementById('analysisSidebarStyles')) {
-        const s = document.createElement('style');
-        s.id = 'analysisSidebarStyles';
-        s.textContent = `
-            .category-group:hover .category-delete-btn { opacity: 0.6 !important; }
-            .category-delete-btn:hover { opacity: 1 !important; }
-            .code-manager-item:hover .code-action-btn { opacity: 0.6 !important; }
-            .code-action-btn:hover { opacity: 1 !important; }
-            .code-manager-item.active { background: #f1f5f9 !important; border-color: #cbd5e1 !important; }
+    listContainer.innerHTML = html;
+
+    // Initialize SortableJS on each sortable container
+    initSortableFolders();
+}
+
+// Toggle folder collapse/expand
+window.toggleFolderCollapse = function (categoryId) {
+    const folder = document.querySelector(`.folder-item[data-category-id="${categoryId}"]`);
+    if (!folder) return;
+
+    const content = folder.querySelector('.folder-content');
+    const chevron = folder.querySelector('.folder-chevron');
+
+    if (content.style.display === 'none') {
+        content.style.display = 'block';
+        if (chevron) chevron.style.transform = 'rotate(90deg)';
+    } else {
+        content.style.display = 'none';
+        if (chevron) chevron.style.transform = 'rotate(0deg)';
+    }
+};
+
+// Create subcategory
+window.createSubCategory = function (parentId) {
+    const name = prompt('Enter subcategory name:');
+    if (!name || !name.trim()) return;
+
+    window.saveCategoryToFirestore(currentProjectId, {
+        name: name.trim(),
+        parentId: parentId
+    }).then(() => {
+        showToast('Subcategory created');
+        openAnalysisPage(currentProjectId);
+    }).catch(e => {
+        console.error(e);
+        showToast('Failed to create subcategory', 'error');
+    });
+};
+
+// Initialize SortableJS for drag-drop
+function initSortableFolders() {
+    const containers = document.querySelectorAll('.sortable-codes');
+
+    containers.forEach(container => {
+        if (container._sortable) container._sortable.destroy();
+
+        container._sortable = new Sortable(container, {
+            group: 'codes',
+            animation: 150,
+            ghostClass: 'sortable-ghost',
+            chosenClass: 'sortable-chosen',
+            dragClass: 'sortable-drag',
+            handle: '.code-item-draggable',
+            filter: '.folder-item', // Don't drag folders, only codes
+            onEnd: async function (evt) {
+                const codeId = evt.item.dataset.codeId;
+                const newCategoryId = evt.to.dataset.categoryId;
+
+                if (!codeId) return;
+
+                console.log('Moving code', codeId, 'to category', newCategoryId);
+
+                try {
+                    const targetCatId = newCategoryId === 'uncategorized' ? null : newCategoryId;
+                    await window.updateCodeCategory(currentProjectId, codeId, targetCatId);
+                    showToast('Code moved');
+                } catch (e) {
+                    console.error('Failed to move code:', e);
+                    showToast('Failed to move code', 'error');
+                    // Refresh to restore original state
+                    openAnalysisPage(currentProjectId);
+                }
+            }
+        });
+    });
+
+    // Add styles for sortable
+    if (!document.getElementById('sortableStyles')) {
+        const style = document.createElement('style');
+        style.id = 'sortableStyles';
+        style.textContent = `
+            .sortable-ghost { opacity: 0.4; background: #fef3c7 !important; }
+            .sortable-chosen { background: #fff7ed !important; }
+            .sortable-drag { opacity: 0.9; }
+            .code-item-draggable:hover { background: #f8fafc !important; border-color: #e2e8f0 !important; }
+            .folder-header:hover { background: #f1f5f9 !important; }
         `;
-        document.head.appendChild(s);
+        document.head.appendChild(style);
     }
 }
 
 // Category helper functions
 let currentCategoryProject = null;
 function openCategoryModal(projectId, categoryId = null) {
+    console.log("Opening Category Modal for project:", projectId);
     currentCategoryProject = projectId;
     const modal = document.getElementById('categoryModal');
-    modal.classList.remove('hidden');
-    document.getElementById('categoryName').value = '';
-    document.getElementById('categoryName').focus();
-}
-
-function closeCategoryModal() {
-    document.getElementById('categoryModal').classList.add('hidden');
+    if (modal) {
+        modal.classList.remove('hidden');
+        modal.style.display = 'flex'; // Force display flex to ensure visibility
+        console.log("Modal display set to flex. Classes:", modal.className);
+    } else {
+        console.error("CRITICAL: Category Modal Element NOT FOUND");
+    }
+    const input = document.getElementById('categoryName');
+    if (input) {
+        input.value = '';
+        input.focus();
+    }
 }
 
 async function saveCategory() {
@@ -5916,6 +6085,119 @@ async function saveCategory() {
         showToast('Failed to create category', 'error');
     }
 }
+
+function closeCategoryModal() {
+    const modal = document.getElementById('categoryModal');
+    if (modal) {
+        modal.classList.add('hidden');
+        modal.style.display = ''; // Reset inline style
+    }
+}
+
+// ===== DRAG AND DROP FOR CODE ORGANIZATION =====
+let draggingCodeId = null;
+let draggingElement = null;
+
+window.handleCodeDragStart = function (event, codeId) {
+    draggingCodeId = codeId;
+    draggingElement = event.currentTarget || event.target;
+
+    if (event.dataTransfer) {
+        event.dataTransfer.setData('text/plain', codeId);
+        event.dataTransfer.effectAllowed = 'move';
+    }
+
+    if (draggingElement && draggingElement.style) {
+        draggingElement.style.opacity = '0.5';
+    }
+};
+
+window.handleCodeDragEnd = function (event) {
+    // Restore opacity on the element we were dragging
+    if (draggingElement && draggingElement.style) {
+        draggingElement.style.opacity = '1';
+    }
+
+    draggingCodeId = null;
+    draggingElement = null;
+
+    // Reset all category highlights
+    document.querySelectorAll('.category-header').forEach(h => {
+        h.style.borderColor = 'transparent';
+        h.style.background = '#f1f5f9';
+    });
+};
+
+window.handleCategoryDragOver = function (event) {
+    event.preventDefault();
+    event.dataTransfer.dropEffect = 'move';
+
+    // Find the category group container
+    const categoryGroup = event.target.closest('.category-group');
+    if (categoryGroup) {
+        const header = categoryGroup.querySelector('.category-header');
+        if (header) {
+            header.style.borderColor = '#ea580c';
+            header.style.background = '#fff7ed';
+        }
+    }
+};
+
+window.handleCategoryDragLeave = function (event) {
+    // Only reset if we're actually leaving the category group
+    const categoryGroup = event.target.closest('.category-group');
+    const relatedTarget = event.relatedTarget?.closest('.category-group');
+
+    if (categoryGroup && categoryGroup !== relatedTarget) {
+        const header = categoryGroup.querySelector('.category-header');
+        if (header) {
+            header.style.borderColor = 'transparent';
+            header.style.background = '#f1f5f9';
+        }
+    }
+};
+
+window.handleCodeDropOnCategory = async function (event) {
+    event.preventDefault();
+    event.stopPropagation();
+
+    // Only allow drops on category headers (folders), not on codes
+    const categoryGroup = event.target.closest('.category-group');
+    if (!categoryGroup) {
+        console.log("Not dropped on a category group");
+        return;
+    }
+
+    // Get category ID from the group
+    const categoryId = categoryGroup.dataset.categoryId;
+    const codeId = draggingCodeId; // Use the global variable we set on dragstart
+
+    console.log("Drop - categoryId:", categoryId, "codeId:", codeId, "projectId:", currentProjectId);
+
+    if (!codeId || !categoryId) {
+        console.error("Missing codeId or categoryId");
+        return;
+    }
+
+    // Reset visual state
+    const header = categoryGroup.querySelector('.category-header');
+    if (header) {
+        header.style.borderColor = 'transparent';
+        header.style.background = '#f1f5f9';
+    }
+
+    // Update in Firestore
+    try {
+        const targetCatId = categoryId === 'uncategorized' ? null : categoryId;
+        console.log("Updating code category:", currentProjectId, codeId, "->", targetCatId);
+        await window.updateCodeCategory(currentProjectId, codeId, targetCatId);
+        showToast('Code moved to ' + (targetCatId ? 'category' : 'Uncategorized'));
+        await openAnalysisPage(currentProjectId); // Refresh view
+    } catch (e) {
+        console.error('Failed to move code:', e);
+        showToast('Failed to move code', 'error');
+    }
+};
 
 window.showCategorizeMenu = function (event, codeId) {
     const menuHtml = `
@@ -6049,6 +6331,7 @@ function renderAnalysisDetail(codeId, name, color, startEl) {
             <div style="display: flex; gap: 2rem; border-bottom: 1px solid #f1f5f9; margin-top: 2rem; margin-bottom: 1.5rem;">
                 <button onclick="window.switchAnalysisTab('data')" id="tab-data" class="analysis-tab active" style="padding: 0.75rem 0; background: none; border: none; font-size: 0.9rem; font-weight: 700; color: var(--brand-primary); border-bottom: 2px solid var(--brand-primary); cursor: pointer; transition: all 0.2s;">Data Highlights</button>
                 <button onclick="window.switchAnalysisTab('axial')" id="tab-axial" class="analysis-tab" style="padding: 0.75rem 0; background: none; border: none; font-size: 0.9rem; font-weight: 500; color: var(--text-muted); border-bottom: 2px solid transparent; cursor: pointer; transition: all 0.2s;">Axial Connections</button>
+                <button onclick="window.switchAnalysisTab('graph')" id="tab-graph" class="analysis-tab" style="padding: 0.75rem 0; background: none; border: none; font-size: 0.9rem; font-weight: 500; color: var(--text-muted); border-bottom: 2px solid transparent; cursor: pointer; transition: all 0.2s;">Network Graph</button>
             </div>
         </div>
 
@@ -6058,6 +6341,10 @@ function renderAnalysisDetail(codeId, name, color, startEl) {
         
         <div id="analysisAxialContainer" class="tab-content hidden" style="flex: 1; overflow-y: auto;">
              <!-- Relationships injected here -->
+        </div>
+
+        <div id="analysisGraphContainer" class="tab-content hidden" style="flex: 1; background: #f8fafc; border-radius: 12px; border: 1px solid #e2e8f0; position: relative;">
+            <div id="network-graph" style="width: 100%; height: 100%;"></div>
         </div>
     `;
 
@@ -6135,18 +6422,24 @@ window.switchAnalysisTab = function (tabName) {
         el.style.borderBottomColor = 'transparent';
     });
 
+    const activeTab = document.getElementById(`tab-${tabName}`);
+    if (activeTab) {
+        activeTab.classList.add('active');
+        activeTab.style.color = 'var(--brand-primary)';
+        activeTab.style.fontWeight = '700';
+        activeTab.style.borderBottomColor = 'var(--brand-primary)';
+    }
+
     if (tabName === 'data') {
         document.getElementById('analysisSegmentsContainer').classList.remove('hidden');
-        document.getElementById('tab-data').classList.add('active');
-        document.getElementById('tab-data').style.color = 'var(--brand-primary)';
-        document.getElementById('tab-data').style.fontWeight = '700';
-        document.getElementById('tab-data').style.borderBottomColor = 'var(--brand-primary)';
-    } else {
+    } else if (tabName === 'axial') {
         document.getElementById('analysisAxialContainer').classList.remove('hidden');
-        document.getElementById('tab-axial').classList.add('active');
-        document.getElementById('tab-axial').style.color = 'var(--brand-primary)';
-        document.getElementById('tab-axial').style.fontWeight = '700';
-        document.getElementById('tab-axial').style.borderBottomColor = 'var(--brand-primary)';
+    } else if (tabName === 'graph') {
+        document.getElementById('analysisGraphContainer').classList.remove('hidden');
+        const detailContent = document.getElementById('analysisDetailContent');
+        if (detailContent) {
+            renderNetworkGraph(detailContent.dataset.currentCodeId);
+        }
     }
 };
 
@@ -6187,12 +6480,15 @@ async function renderAxialConnections(codeId) {
             return `
                             <div style="background: white; border: 1px solid #e2e8f0; border-radius: 10px; padding: 1rem; display: flex; align-items: center; justify-content: space-between; box-shadow: 0 1px 2px rgba(0,0,0,0.03);">
                                 <div style="display: flex; align-items: center; gap: 1.25rem;">
-                                    <div style="display: flex; flex-direction: column; gap: 2px;">
-                                        <span style="font-size: 0.65rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted);">${escapeHtml(rel.type)}</span>
-                                        <div style="display: flex; align-items: center; gap: 0.5rem; background: #f1f5f9; padding: 0.35rem 0.6rem; border-radius: 6px;">
-                                            <div style="width: 8px; height: 8px; border-radius: 50%; background: ${otherCode.color};"></div>
-                                            <span style="font-weight: 600; font-size: 0.85rem; color: var(--text-title);">${escapeHtml(otherCode.name)}</span>
+                                    <div style="display: flex; flex-direction: column; gap: 4px;">
+                                        <div style="display: flex; align-items: center; gap: 6px;">
+                                            <span style="font-size: 0.65rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted);">${escapeHtml(rel.type)}</span>
+                                            <div style="display: flex; align-items: center; gap: 0.5rem; background: #f1f5f9; padding: 0.35rem 0.6rem; border-radius: 6px;">
+                                                <div style="width: 8px; height: 8px; border-radius: 50%; background: ${otherCode.color};"></div>
+                                                <span style="font-weight: 600; font-size: 0.85rem; color: var(--text-title);">${escapeHtml(otherCode.name)}</span>
+                                            </div>
                                         </div>
+                                        ${rel.description ? `<p style="margin: 0; font-size: 0.8rem; color: var(--text-body); font-style: italic; opacity: 0.8;">${escapeHtml(rel.description)}</p>` : ''}
                                     </div>
                                 </div>
                                 <button onclick="deleteRelationship('${rel.id}', '${codeId}')" style="background: none; border: none; padding: 6px; color: #94a3b8; cursor: pointer; border-radius: 6px; transition: all 0.2s;" onmouseover="this.style.background='#fef2f2'; this.style.color='#ef4444'" onmouseout="this.style.background='none'; this.style.color='#94a3b8'">
@@ -6236,6 +6532,11 @@ window.showAddRelationshipMenu = function (event, codeId) {
                 </select>
             </div>
             
+            <div style="display: flex; flex-direction: column; gap: 0.5rem;">
+                <label style="font-size: 0.75rem; font-weight: 600; color: var(--text-muted);">Description (Optional)</label>
+                <textarea id="rel-description" rows="2" placeholder="Explain the connection..." style="width: 100%; padding: 0.5rem; border-radius: 6px; border: 1px solid #cbd5e1; font-size: 0.85rem; resize: none;"></textarea>
+            </div>
+            
             <div style="display: flex; justify-content: flex-end; gap: 0.5rem; margin-top: 0.5rem;">
                 <button onclick="document.getElementById('relationship-menu').remove()" class="btn-secondary small">Cancel</button>
                 <button onclick="addRelationship('${codeId}')" class="btn-primary small">Link</button>
@@ -6268,6 +6569,7 @@ window.showAddRelationshipMenu = function (event, codeId) {
 window.addRelationship = async function (sourceCodeId) {
     const type = document.getElementById('rel-type').value;
     const targetCodeId = document.getElementById('rel-target').value;
+    const description = document.getElementById('rel-description').value.trim();
 
     if (!targetCodeId) return;
 
@@ -6275,11 +6577,17 @@ window.addRelationship = async function (sourceCodeId) {
         await window.saveCodeRelationship(currentProjectId, {
             sourceCodeId,
             targetCodeId,
-            type
+            type,
+            description
         });
         showToast('Relationship added');
         document.getElementById('relationship-menu').remove();
         renderAxialConnections(sourceCodeId);
+
+        // Also refresh graph if visible
+        if (!document.getElementById('analysisGraphContainer').classList.contains('hidden')) {
+            renderNetworkGraph(sourceCodeId);
+        }
     } catch (e) {
         console.error(e);
         showToast('Failed to add connection', 'error');
@@ -6298,6 +6606,87 @@ window.deleteRelationship = async function (relId, codeId) {
         console.error(e);
         showToast('Failed to remove connection', 'error');
     }
+};
+
+window.renderNetworkGraph = async function (focusCodeId) {
+    const container = document.getElementById('network-graph');
+    if (!container) return;
+
+    // Check if library is loaded
+    if (typeof vis === 'undefined') {
+        container.innerHTML = '<div style="padding: 2rem; text-align: center; color: var(--text-muted);">Graph library not loaded.</div>';
+        return;
+    }
+
+    // 1. Prepare Data
+    // We want to show ALL codes, not just connected ones, to see the whole system?
+    // Or maybe just the connected component? Let's show all codes for context.
+
+    // Nodes
+    const nodes = window.currentProjectCodes.map(code => ({
+        id: code.id,
+        label: code.name,
+        color: {
+            background: code.color,
+            border: '#ffffff',
+            highlight: { background: code.color, border: '#000000' }
+        },
+        shape: 'dot',
+        size: code.id === focusCodeId ? 30 : 20,
+        font: { size: 14, face: 'Inter', color: '#334155' },
+        borderWidth: 2,
+        shadow: true
+    }));
+
+    // Edges
+    // Load fresh relationships
+    const relationships = await window.loadCodeRelationships(currentProjectId);
+    const edges = relationships.map(rel => ({
+        from: rel.sourceCodeId,
+        to: rel.targetCodeId,
+        label: rel.type,
+        font: { align: 'top', size: 10, color: '#64748b' },
+        color: { color: '#cbd5e1', highlight: '#ea580c' },
+        arrows: 'to',
+        dashes: rel.type === 'contradicts' // Dashed for contradictions
+    }));
+
+    // 2. Options
+    const options = {
+        physics: {
+            stabilization: false,
+            barnesHut: {
+                gravitationalConstant: -2000,
+                springConstant: 0.04,
+                springLength: 150
+            }
+        },
+        interaction: {
+            hover: true,
+            tooltipDelay: 200
+        },
+        nodes: {
+            borderWidth: 2,
+            shadow: true
+        }
+    };
+
+    // 3. Render
+    const data = { nodes: new vis.DataSet(nodes), edges: new vis.DataSet(edges) };
+    const network = new vis.Network(container, data, options);
+
+    // 4. Events
+    network.on("click", function (params) {
+        if (params.nodes.length > 0) {
+            const nodeId = params.nodes[0];
+            const code = window.currentProjectCodes.find(c => c.id === nodeId);
+            if (code) {
+                // Determine source element (for highlight) from sidebar
+                const sidebarEl = document.getElementById(`analysis-code-item-${code.id}`);
+                renderAnalysisDetail(code.id, code.name, code.color, sidebarEl);
+            }
+        }
+    });
 };
 
 
