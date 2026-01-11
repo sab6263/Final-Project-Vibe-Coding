@@ -6632,10 +6632,7 @@ function renderAnalysisContent(codeId, name, color, occurrences, isModal = false
                             <span class="badge" style="background: ${color}15; color: ${color}; border: 1px solid ${color}30; font-weight: 600; padding: 0.2rem 0.6rem; border-radius: 6px; font-size: 0.8rem;">${occurrences.length} instances</span>
                             <span style="width: 4px; height: 4px; background: #cbd5e1; border-radius: 50%;"></span>
                             <span style="color: var(--text-muted); font-size: 0.9rem;">Used across ${new Set(occurrences.map(o => o.interviewId)).size} transcripts</span>
-                            <div class="rel-count-badge" style="display: flex; align-items: center; gap: 0.4rem; font-size: 0.8rem; color: var(--text-muted); margin-left: 0.5rem;">
-                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg>
-                                <span id="rel-count-text" class="rel-count-text">Loading...</span>
-                            </div>
+
                         </div>
                     </div>
                 </div>
@@ -6652,24 +6649,13 @@ function renderAnalysisContent(codeId, name, color, occurrences, isModal = false
                 </div>
             </div>
             
-            <!-- Analysis Tabs -->
-            <div style="display: flex; gap: 2rem; border-bottom: 1px solid #f1f5f9; margin-top: 2rem; margin-bottom: 1.5rem;">
-                <button onclick="window.switchAnalysisTab('data')" id="tab-data" class="analysis-tab active" style="padding: 0.75rem 0; background: none; border: none; font-size: 0.9rem; font-weight: 700; color: var(--brand-primary); border-bottom: 2px solid var(--brand-primary); cursor: pointer; transition: all 0.2s;">Data Highlights</button>
-                <button onclick="window.switchAnalysisTab('axial')" id="tab-axial" class="analysis-tab" style="padding: 0.75rem 0; background: none; border: none; font-size: 0.9rem; font-weight: 500; color: var(--text-muted); border-bottom: 2px solid transparent; cursor: pointer; transition: all 0.2s;">Axial Connections</button>
-                <button onclick="window.switchAnalysisTab('graph')" id="tab-graph" class="analysis-tab" style="padding: 0.75rem 0; background: none; border: none; font-size: 0.9rem; font-weight: 500; color: var(--text-muted); border-bottom: 2px solid transparent; cursor: pointer; transition: all 0.2s;">Network Graph</button>
+            <div style="margin-top: 2rem; border-bottom: 1px solid #f1f5f9; margin-bottom: 1.5rem;">
+                <!-- Just a divider/bottom border instead of tabs -->
             </div>
         </div>
 
-        <div class="tab-content analysis-segments-container" style="flex: 1; overflow-y: auto;">
+        <div class="analysis-segments-container" style="flex: 1; overflow-y: auto;">
              <!-- Segments injected below -->
-        </div>
-        
-        <div id="analysisAxialContainer" class="tab-content analysis-axial-container hidden" style="flex: 1; overflow-y: auto;">
-             <!-- Relationships injected here -->
-        </div>
-
-        <div class="tab-content analysis-graph-container hidden" style="flex: 1; background: #f8fafc; border-radius: 12px; border: 1px solid #e2e8f0; position: relative;">
-            <div id="network-graph" style="width: 100%; height: 100%;"></div>
         </div>
     `;
 
@@ -6937,7 +6923,7 @@ window.addRelationship = async function (sourceCodeId) {
 
         // Also refresh graph if visible
         if (!document.getElementById('analysisGraphContainer').classList.contains('hidden')) {
-            renderNetworkGraph(sourceCodeId);
+            // Network graph functions removed as requested.
         }
     } catch (e) {
         console.error(e);
@@ -6957,87 +6943,6 @@ window.deleteRelationship = async function (relId, codeId) {
         console.error(e);
         showToast('Failed to remove connection', 'error');
     }
-};
-
-window.renderNetworkGraph = async function (focusCodeId) {
-    const container = document.getElementById('network-graph');
-    if (!container) return;
-
-    // Check if library is loaded
-    if (typeof vis === 'undefined') {
-        container.innerHTML = '<div style="padding: 2rem; text-align: center; color: var(--text-muted);">Graph library not loaded.</div>';
-        return;
-    }
-
-    // 1. Prepare Data
-    // We want to show ALL codes, not just connected ones, to see the whole system?
-    // Or maybe just the connected component? Let's show all codes for context.
-
-    // Nodes
-    const nodes = window.currentProjectCodes.map(code => ({
-        id: code.id,
-        label: code.name,
-        color: {
-            background: code.color,
-            border: '#ffffff',
-            highlight: { background: code.color, border: '#000000' }
-        },
-        shape: 'dot',
-        size: code.id === focusCodeId ? 30 : 20,
-        font: { size: 14, face: 'Inter', color: '#334155' },
-        borderWidth: 2,
-        shadow: true
-    }));
-
-    // Edges
-    // Load fresh relationships
-    const relationships = await window.loadCodeRelationships(currentProjectId);
-    const edges = relationships.map(rel => ({
-        from: rel.sourceCodeId,
-        to: rel.targetCodeId,
-        label: rel.type,
-        font: { align: 'top', size: 10, color: '#64748b' },
-        color: { color: '#cbd5e1', highlight: '#ea580c' },
-        arrows: 'to',
-        dashes: rel.type === 'contradicts' // Dashed for contradictions
-    }));
-
-    // 2. Options
-    const options = {
-        physics: {
-            stabilization: false,
-            barnesHut: {
-                gravitationalConstant: -2000,
-                springConstant: 0.04,
-                springLength: 150
-            }
-        },
-        interaction: {
-            hover: true,
-            tooltipDelay: 200
-        },
-        nodes: {
-            borderWidth: 2,
-            shadow: true
-        }
-    };
-
-    // 3. Render
-    const data = { nodes: new vis.DataSet(nodes), edges: new vis.DataSet(edges) };
-    const network = new vis.Network(container, data, options);
-
-    // 4. Events
-    network.on("click", function (params) {
-        if (params.nodes.length > 0) {
-            const nodeId = params.nodes[0];
-            const code = window.currentProjectCodes.find(c => c.id === nodeId);
-            if (code) {
-                // Determine source element (for highlight) from sidebar
-                const sidebarEl = document.getElementById(`analysis-code-item-${code.id}`);
-                renderAnalysisDetail(code.id, code.name, code.color, sidebarEl);
-            }
-        }
-    });
 };
 
 
