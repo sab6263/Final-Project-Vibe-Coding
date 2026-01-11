@@ -904,3 +904,123 @@ window.getAllCodedSegments = async function (projectId) {
         return [];
     }
 };
+
+/**
+ * Save a new Category (Theme) to Firestore
+ */
+window.saveCategoryToFirestore = async function (projectId, categoryData) {
+    if (!currentUser || !projectId) return null;
+    try {
+        const catRef = db.collection('projects').doc(projectId).collection('categories').doc();
+        const category = {
+            id: catRef.id,
+            name: categoryData.name || 'Untitled Category',
+            description: categoryData.description || '',
+            color: categoryData.color || '#94a3b8',
+            userId: currentUser.uid,
+            createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+            updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+        };
+        await catRef.set(category);
+        return category;
+    } catch (error) {
+        console.error('Error saving category:', error);
+        throw error;
+    }
+};
+
+/**
+ * Load all Categories for a project
+ */
+window.loadCategoriesForProject = async function (projectId) {
+    if (!currentUser || !projectId) return [];
+    try {
+        const snapshot = await db.collection('projects').doc(projectId).collection('categories').get();
+        const categories = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        categories.sort((a, b) => (a.createdAt?.toMillis() || 0) - (b.createdAt?.toMillis() || 0));
+        return categories;
+    } catch (error) {
+        console.error('Error loading categories:', error);
+        return [];
+    }
+};
+
+/**
+ * Update a code's category
+ */
+window.updateCodeCategory = async function (projectId, codeId, categoryId) {
+    if (!currentUser || !projectId) return;
+    try {
+        await db.collection('projects').doc(projectId).collection('codes').doc(codeId).update({
+            categoryId: categoryId,
+            updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+        });
+    } catch (error) {
+        console.error('Error updating code category:', error);
+        throw error;
+    }
+};
+
+/**
+ * Save a Relationship between two codes
+ */
+window.saveCodeRelationship = async function (projectId, relData) {
+    if (!currentUser || !projectId) return null;
+    try {
+        const relRef = db.collection('projects').doc(projectId).collection('relationships').doc();
+        const relationship = {
+            id: relRef.id,
+            sourceCodeId: relData.sourceCodeId,
+            targetCodeId: relData.targetCodeId,
+            type: relData.type || 'related', // 'causes', 'influences', 'contradicts', etc.
+            description: relData.description || '',
+            userId: currentUser.uid,
+            createdAt: firebase.firestore.FieldValue.serverTimestamp()
+        };
+        await relRef.set(relationship);
+        return relationship;
+    } catch (error) {
+        console.error('Error saving relationship:', error);
+        throw error;
+    }
+};
+
+/**
+ * Load all Relationships for a project
+ */
+window.loadCodeRelationships = async function (projectId) {
+    if (!currentUser || !projectId) return [];
+    try {
+        const snapshot = await db.collection('projects').doc(projectId).collection('relationships').get();
+        return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    } catch (error) {
+        console.error('Error loading relationships:', error);
+        return [];
+    }
+};
+
+/**
+ * Delete a category
+ */
+window.deleteCategoryFromFirestore = async function (projectId, categoryId) {
+    if (!currentUser || !projectId) return;
+    try {
+        // 1. Unset categoryId for all codes in this category
+        const codesSnapshot = await db.collection('projects').doc(projectId).collection('codes')
+            .where('categoryId', '==', categoryId).get();
+
+        const batch = db.batch();
+        codesSnapshot.docs.forEach(doc => {
+            batch.update(doc.ref, { categoryId: null });
+        });
+
+        // 2. Delete the category doc
+        batch.delete(db.collection('projects').doc(projectId).collection('categories').doc(categoryId));
+
+        await batch.commit();
+    } catch (error) {
+        console.error('Error deleting category:', error);
+        throw error;
+    }
+};
+

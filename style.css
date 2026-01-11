@@ -2201,3 +2201,61 @@ input:checked+.slider:before {
 #openCodeManagerBtn:hover svg {
     transform: scale(1.1);
 }
+
+/* Axial Coding UI Styles */
+.badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    white-space: nowrap;
+    border-radius: 9999px;
+    padding: 2px 8px;
+    font-size: 12px;
+    font-weight: 500;
+}
+
+.analysis-tab.active {
+    color: var(--brand-primary);
+    border-bottom: 2px solid var(--brand-primary);
+}
+
+.analysis-tab {
+    transition: all 0.2s ease;
+}
+
+.analysis-tab:hover {
+    color: var(--brand-primary) !important;
+    opacity: 0.8;
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(5px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+@keyframes slideUp {
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.category-group {
+    transition: all 0.2s ease;
+}
+
+.category-group:hover {
+    background: rgba(0, 0, 0, 0.01);
+}

@@ -246,9 +246,19 @@
                     <!-- Sidebar -->
                     <aside class="analysis-sidebar"
                         style="background: white; border-radius: var(--radius-lg); border: 1px solid rgba(0,0,0,0.1); display: flex; flex-direction: column; overflow: hidden;">
-                        <div style="padding: 1.5rem; border-bottom: 1px solid rgba(0,0,0,0.05);">
+                        <div
+                            style="padding: 1.5rem; border-bottom: 1px solid rgba(0,0,0,0.05); display: flex; justify-content: space-between; align-items: center;">
                             <h3 style="margin: 0; font-size: 1.1rem; font-weight: 700; color: var(--text-title);">Codes
                             </h3>
+                            <button id="createCategoryBtn" class="btn-primary small"
+                                style="padding: 0.4rem 0.6rem; font-size: 0.8rem;">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                    stroke-width="2.5">
+                                    <line x1="12" y1="5" x2="12" y2="19"></line>
+                                    <line x1="5" y1="12" x2="19" y2="12"></line>
+                                </svg>
+                                Category
+                            </button>
                         </div>
                         <div id="analysisCodesList"
                             style="flex: 1; overflow-y: auto; padding: 1rem; display: flex; flex-direction: column; gap: 0.5rem;">
@@ -1120,6 +1130,32 @@
             <div class="modal-footer">
                 <button id="cancelCodeBtn" class="btn-secondary">Cancel</button>
                 <button id="saveCodeBtn" class="btn-primary">Save code</button>
+            </div>
+        </div>
+
+        <!-- MODAL: Category Management -->
+        <div id="categoryModal" class="modal hidden">
+            <div class="modal-content small">
+                <div class="modal-header">
+                    <h2 id="categoryModalTitle">New Category</h2>
+                    <button id="closeCategoryModal" class="icon-btn">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2">
+                            <line x1="18" y1="6" x2="6" y2="18"></line>
+                            <line x1="6" y1="6" x2="18" y2="18"></line>
+                        </svg>
+                    </button>
+                </div>
+                <div class="modal-body">
+                    <div class="input-group">
+                        <label>Category Name <span style="color:red">*</span></label>
+                        <input type="text" id="categoryName" placeholder="e.g. Major Pain Points">
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button id="cancelCategoryBtn" class="btn-secondary">Cancel</button>
+                    <button id="saveCategoryBtn" class="btn-primary">Save Category</button>
+                </div>
             </div>
         </div>
 

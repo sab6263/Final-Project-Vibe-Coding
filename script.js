@@ -834,6 +834,22 @@ function closeProject() {
     render(); // Re-render to show any updates
 }
 
+// Category Modal Listeners
+const createCategoryBtn = document.getElementById('createCategoryBtn');
+const categoryModal = document.getElementById('categoryModal');
+const closeCategoryModalBtn = document.getElementById('closeCategoryModal');
+const cancelCategoryBtn = document.getElementById('cancelCategoryBtn');
+const saveCategoryBtn = document.getElementById('saveCategoryBtn');
+
+if (createCategoryBtn) {
+    createCategoryBtn.addEventListener('click', () => {
+        if (currentProjectId) openCategoryModal(currentProjectId);
+    });
+}
+if (closeCategoryModalBtn) closeCategoryModalBtn.onclick = closeCategoryModal;
+if (cancelCategoryBtn) cancelCategoryBtn.onclick = closeCategoryModal;
+if (saveCategoryBtn) saveCategoryBtn.onclick = saveCategory;
+
 /**
  * Saves the edited project title
  */
@@ -5751,9 +5767,11 @@ async function openAnalysisPage(projectId, initialCodeId = null) {
 
 
     try {
-        const [codes, allSegments] = await Promise.all([
+        const [codes, allSegments, categories, relationships] = await Promise.all([
             window.loadCodesForProject(projectId),
-            window.getAllCodedSegments(projectId)
+            window.getAllCodedSegments(projectId),
+            window.loadCategoriesForProject(projectId),
+            window.loadCodeRelationships(projectId)
         ]);
 
         const codeUsageMap = {};
@@ -5762,13 +5780,19 @@ async function openAnalysisPage(projectId, initialCodeId = null) {
             codeUsageMap[seg.codeId].push(seg);
         });
 
-        renderAnalysisSidebar(codes, codeUsageMap);
+        // Store for global access
+        window.currentAnalysisCategories = categories;
+        window.currentProjectCodes = codes;
+
+        renderAnalysisSidebar(codes, categories, codeUsageMap);
 
         if (initialCodeId) {
             const code = codes.find(c => c.id === initialCodeId);
             if (code) {
-                const startEl = document.getElementById(`analysis-code-item-${code.id}`);
-                renderAnalysisDetail(code.id, code.name, code.color, startEl);
+                setTimeout(() => {
+                    const startEl = document.getElementById(`analysis-code-item-${code.id}`);
+                    renderAnalysisDetail(code.id, code.name, code.color, startEl);
+                }, 100);
             }
         }
     } catch (error) {
@@ -5777,7 +5801,7 @@ async function openAnalysisPage(projectId, initialCodeId = null) {
     }
 }
 
-function renderAnalysisSidebar(codes, codeUsageMap) {
+function renderAnalysisSidebar(codes, categories, codeUsageMap) {
     const listContainer = document.getElementById('analysisCodesList');
     if (!listContainer) return;
 
@@ -5790,28 +5814,172 @@ function renderAnalysisSidebar(codes, codeUsageMap) {
         return;
     }
 
-    listContainer.innerHTML = codes.map(code => {
-        const usage = codeUsageMap[code.id] || [];
-        const usageData = JSON.stringify(usage).replace(/"/g, '&quot;');
+    // Grouping logic
+    const categoryGroups = {};
+    categories.forEach(cat => {
+        categoryGroups[cat.id] = { ...cat, codes: [] };
+    });
+    categoryGroups['uncategorized'] = { name: 'Uncategorized', codes: [] };
 
-        return `
-            <div class="code-manager-item code-item" 
-                 id="analysis-code-item-${code.id}"
-                 data-code-name="${escapeHtml(code.name)}"
-                 data-code-color="${code.color}"
-                 onclick="window.renderAnalysisDetail('${code.id}', '${escapeHtml(code.name)}', '${code.color}', this)"
-                 style="position: relative; padding: 0.75rem 1rem; border-radius: 8px; border: 1px solid transparent; cursor: pointer; transition: all 0.2s; background: transparent;">
-                <div class="code-item-left" style="pointer-events: none;">
-                    <div class="code-color-preview" style="background: ${code.color}; width: 14px; height: 14px; border-radius: 50%;"></div>
-                    <span class="code-item-name" style="font-weight: 500; font-size: 0.95rem; color: var(--text-body);">${escapeHtml(code.name)}</span>
+    codes.forEach(code => {
+        const catId = code.categoryId || 'uncategorized';
+        if (!categoryGroups[catId]) categoryGroups['uncategorized'].codes.push(code);
+        else categoryGroups[catId].codes.push(code);
+    });
+
+    let mainHtml = '';
+
+    // Render Categorized
+    Object.values(categoryGroups).forEach(group => {
+        if (group.codes.length === 0 && group.id === 'uncategorized') return;
+
+        mainHtml += `
+            <div class="category-group" style="margin-bottom: 1rem;">
+                <div style="display: flex; align-items: center; justify-content: space-between; padding: 0.5rem 0.75rem; background: #f8fafc; border-radius: 6px; margin-bottom: 0.5rem;">
+                    <div style="display: flex; align-items: center; gap: 0.5rem;">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color: var(--text-muted);"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline></svg>
+                        <span style="font-size: 0.75rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted);">${escapeHtml(group.name)}</span>
+                    </div>
+                    ${group.id !== 'uncategorized' ? `
+                    <button onclick="confirmDeleteCategory('${group.id}')" style="background: none; border: none; padding: 2px; color: #ef4444; opacity: 0; transition: opacity 0.2s; cursor: pointer;" class="category-delete-btn">
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2-2v2"></path></svg>
+                    </button>` : ''}
                 </div>
-                <div id="data-${code.id}" style="display:none;" data-usage="${usageData}"></div>
-                 <div style="margin-left: auto; display: flex; align-items: center; gap: 0.5rem;">
-                     <span style="font-size: 0.75rem; color: var(--text-muted); font-weight: 500;">${usage.length}</span>
+                <div class="category-codes-list" style="display: flex; flex-direction: column; gap: 4px;">
+                    ${group.codes.map(code => {
+            const usage = codeUsageMap[code.id] || [];
+            const usageData = JSON.stringify(usage).replace(/"/g, '&quot;');
+            return `
+                        <div class="code-manager-item code-item" 
+                             id="analysis-code-item-${code.id}"
+                             data-code-name="${escapeHtml(code.name)}"
+                             data-code-color="${code.color}"
+                             onclick="window.renderAnalysisDetail('${code.id}', '${escapeHtml(code.name)}', '${code.color}', this)"
+                             style="position: relative; padding: 0.6rem 0.75rem; border-radius: 6px; border: 1px solid transparent; cursor: pointer; transition: all 0.2s; display: flex; align-items: center; gap: 0.75rem;">
+                            <div class="code-color-preview" style="background: ${code.color}; width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0;"></div>
+                            <span class="code-item-name" style="font-weight: 500; font-size: 0.85rem; color: var(--text-body); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 1;">${escapeHtml(code.name)}</span>
+                            <div id="data-${code.id}" style="display:none;" data-usage="${usageData}"></div>
+                            <span style="font-size: 0.7rem; color: var(--text-muted); font-weight: 500;">${usage.length}</span>
+                            
+                            <!-- Quick Categorize Trigger -->
+                            <button onclick="event.stopPropagation(); showCategorizeMenu(event, '${code.id}')" style="background: none; border: none; padding: 2px; color: var(--text-muted); opacity: 0; transition: opacity 0.2s;" class="code-action-btn">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
+                            </button>
+                        </div>`;
+        }).join('')}
                 </div>
             </div>`;
-    }).join('');
+    });
+
+    listContainer.innerHTML = mainHtml;
+
+    // Add styles for hover buttons
+    if (!document.getElementById('analysisSidebarStyles')) {
+        const s = document.createElement('style');
+        s.id = 'analysisSidebarStyles';
+        s.textContent = `
+            .category-group:hover .category-delete-btn { opacity: 0.6 !important; }
+            .category-delete-btn:hover { opacity: 1 !important; }
+            .code-manager-item:hover .code-action-btn { opacity: 0.6 !important; }
+            .code-action-btn:hover { opacity: 1 !important; }
+            .code-manager-item.active { background: #f1f5f9 !important; border-color: #cbd5e1 !important; }
+        `;
+        document.head.appendChild(s);
+    }
 }
+
+// Category helper functions
+let currentCategoryProject = null;
+function openCategoryModal(projectId, categoryId = null) {
+    currentCategoryProject = projectId;
+    const modal = document.getElementById('categoryModal');
+    modal.classList.remove('hidden');
+    document.getElementById('categoryName').value = '';
+    document.getElementById('categoryName').focus();
+}
+
+function closeCategoryModal() {
+    document.getElementById('categoryModal').classList.add('hidden');
+}
+
+async function saveCategory() {
+    const name = document.getElementById('categoryName').value.trim();
+    if (!name || !currentCategoryProject) return;
+
+    try {
+        await window.saveCategoryToFirestore(currentCategoryProject, { name });
+        showToast('Category created');
+        closeCategoryModal();
+        openAnalysisPage(currentCategoryProject);
+    } catch (e) {
+        console.error(e);
+        showToast('Failed to create category', 'error');
+    }
+}
+
+window.showCategorizeMenu = function (event, codeId) {
+    const menuHtml = `
+        <div id="categorize-menu" style="position: fixed; z-index: 10000; background: white; border: 1px solid #e2e8f0; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); padding: 0.5rem; min-width: 160px;">
+            <div style="font-size: 0.7rem; font-weight: 700; color: var(--text-muted); padding: 0.25rem 0.5rem; text-transform: uppercase;">Move to Category</div>
+            ${window.currentAnalysisCategories.map(cat => `
+                <button onclick="moveCodeToCategory('${codeId}', '${cat.id}')" style="width: 100%; text-align: left; padding: 0.5rem; background: none; border: none; font-size: 0.85rem; border-radius: 4px; cursor: pointer; transition: background 0.2s;" onmouseover="this.style.background='#f1f5f9'" onmouseout="this.style.background='none'">
+                    ${escapeHtml(cat.name)}
+                </button>
+            `).join('')}
+            <button onclick="moveCodeToCategory('${codeId}', null)" style="width: 100%; text-align: left; padding: 0.5rem; background: none; border: none; font-size: 0.85rem; border-radius: 4px; cursor: pointer; transition: background 0.2s; color: #ef4444;" onmouseover="this.style.background='#fef2f2'" onmouseout="this.style.background='none'">
+                Remove Category
+            </button>
+        </div>
+    `;
+
+    // Remove existing menu if any
+    const old = document.getElementById('categorize-menu');
+    if (old) old.remove();
+
+    const div = document.createElement('div');
+    div.innerHTML = menuHtml;
+    const menu = div.firstElementChild;
+    document.body.appendChild(menu);
+
+    const rect = event.currentTarget.getBoundingClientRect();
+    menu.style.top = (rect.bottom + 5) + 'px';
+    menu.style.left = rect.left + 'px';
+
+    // Close when clicking elsewhere
+    const closeMenu = (e) => {
+        if (!menu.contains(e.target)) {
+            menu.remove();
+            document.removeEventListener('mousedown', closeMenu);
+        }
+    };
+    setTimeout(() => document.addEventListener('mousedown', closeMenu), 10);
+};
+
+window.moveCodeToCategory = async function (codeId, categoryId) {
+    try {
+        await window.updateCodeCategory(currentProjectId, codeId, categoryId);
+        showToast('Code updated');
+        const menu = document.getElementById('categorize-menu');
+        if (menu) menu.remove();
+        openAnalysisPage(currentProjectId);
+    } catch (e) {
+        console.error(e);
+        showToast('Update failed', 'error');
+    }
+};
+
+window.confirmDeleteCategory = function (categoryId) {
+    openConfirmModal('Delete Category', 'Are you sure? Codes will be moved to Uncategorized.', 'Delete', async () => {
+        try {
+            await window.deleteCategoryFromFirestore(currentProjectId, categoryId);
+            showToast('Category deleted');
+            openAnalysisPage(currentProjectId);
+        } catch (e) {
+            console.error(e);
+            showToast('Delete failed', 'error');
+        }
+    });
+};
 
 window.renderAnalysisDetail = renderAnalysisDetail;
 
@@ -5845,7 +6013,7 @@ function renderAnalysisDetail(codeId, name, color, startEl) {
 
     // Header Design
     detailContent.innerHTML = `
-        <div style="margin-bottom: 2rem;">
+        <div style="margin-bottom: 0rem;">
             <div style="display: flex; justify-content: space-between; align-items: flex-start;">
                 <div style="display: flex; gap: 1rem; align-items: center;">
                     <div style="width: 24px; height: 24px; border-radius: 50%; background: ${color}; flex-shrink: 0; box-shadow: 0 2px 4px rgba(0,0,0,0.1);"></div>
@@ -5857,6 +6025,10 @@ function renderAnalysisDetail(codeId, name, color, startEl) {
                             <span class="badge" style="background: ${color}15; color: ${color}; border: 1px solid ${color}30; font-weight: 600; padding: 0.2rem 0.6rem; border-radius: 6px; font-size: 0.8rem;">${occurrences.length} instances</span>
                             <span style="width: 4px; height: 4px; background: #cbd5e1; border-radius: 50%;"></span>
                             <span style="color: var(--text-muted); font-size: 0.9rem;">Used across ${new Set(occurrences.map(o => o.interviewId)).size} transcripts</span>
+                            <div id="rel-count-badge" style="display: flex; align-items: center; gap: 0.4rem; font-size: 0.8rem; color: var(--text-muted); margin-left: 0.5rem;">
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg>
+                                <span id="rel-count-text">Loading...</span>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -5872,10 +6044,20 @@ function renderAnalysisDetail(codeId, name, color, startEl) {
                     </button>
                 </div>
             </div>
+            
+            <!-- Analysis Tabs -->
+            <div style="display: flex; gap: 2rem; border-bottom: 1px solid #f1f5f9; margin-top: 2rem; margin-bottom: 1.5rem;">
+                <button onclick="window.switchAnalysisTab('data')" id="tab-data" class="analysis-tab active" style="padding: 0.75rem 0; background: none; border: none; font-size: 0.9rem; font-weight: 700; color: var(--brand-primary); border-bottom: 2px solid var(--brand-primary); cursor: pointer; transition: all 0.2s;">Data Highlights</button>
+                <button onclick="window.switchAnalysisTab('axial')" id="tab-axial" class="analysis-tab" style="padding: 0.75rem 0; background: none; border: none; font-size: 0.9rem; font-weight: 500; color: var(--text-muted); border-bottom: 2px solid transparent; cursor: pointer; transition: all 0.2s;">Axial Connections</button>
+            </div>
         </div>
 
-        <div id="analysisSegmentsContainer" style="flex: 1; overflow-y: auto; padding-right: 0.5rem;">
-             <!-- Segments injected here -->
+        <div id="analysisSegmentsContainer" class="tab-content" style="flex: 1; overflow-y: auto;">
+             <!-- Segments injected below -->
+        </div>
+        
+        <div id="analysisAxialContainer" class="tab-content hidden" style="flex: 1; overflow-y: auto;">
+             <!-- Relationships injected here -->
         </div>
     `;
 
@@ -5939,7 +6121,185 @@ function renderAnalysisDetail(codeId, name, color, startEl) {
             card.style.boxShadow = 'none';
         });
     });
+
+    // Initial render of axial tab (hidden)
+    renderAxialConnections(codeId);
 }
+
+window.switchAnalysisTab = function (tabName) {
+    document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
+    document.querySelectorAll('.analysis-tab').forEach(el => {
+        el.classList.remove('active');
+        el.style.color = 'var(--text-muted)';
+        el.style.fontWeight = '500';
+        el.style.borderBottomColor = 'transparent';
+    });
+
+    if (tabName === 'data') {
+        document.getElementById('analysisSegmentsContainer').classList.remove('hidden');
+        document.getElementById('tab-data').classList.add('active');
+        document.getElementById('tab-data').style.color = 'var(--brand-primary)';
+        document.getElementById('tab-data').style.fontWeight = '700';
+        document.getElementById('tab-data').style.borderBottomColor = 'var(--brand-primary)';
+    } else {
+        document.getElementById('analysisAxialContainer').classList.remove('hidden');
+        document.getElementById('tab-axial').classList.add('active');
+        document.getElementById('tab-axial').style.color = 'var(--brand-primary)';
+        document.getElementById('tab-axial').style.fontWeight = '700';
+        document.getElementById('tab-axial').style.borderBottomColor = 'var(--brand-primary)';
+    }
+};
+
+async function renderAxialConnections(codeId) {
+    const container = document.getElementById('analysisAxialContainer');
+    if (!container) return;
+
+    try {
+        const relationships = await window.loadCodeRelationships(currentProjectId);
+        const codeRels = relationships.filter(r => r.sourceCodeId === codeId || r.targetCodeId === codeId);
+
+        // Update header badge
+        const relCountText = document.getElementById('rel-count-text');
+        if (relCountText) {
+            relCountText.textContent = `${codeRels.length} connection${codeRels.length !== 1 ? 's' : ''}`;
+        }
+
+        let html = `
+            <div style="display: flex; flex-direction: column; gap: 1.5rem; animation: fadeIn 0.3s ease-out; padding-right: 0.5rem;">
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <h4 style="margin: 0; font-size: 1.1rem; font-weight: 700; color: var(--text-title);">Relationships</h4>
+                    <button onclick="showAddRelationshipMenu(event, '${codeId}')" class="btn-primary small">Add Connection</button>
+                </div>
+                
+                <div style="display: flex; flex-direction: column; gap: 0.75rem;">
+                    ${codeRels.length === 0 ? `
+                        <div style="text-align: center; padding: 3rem 1rem; background: #f8fafc; border: 1px dashed #cbd5e1; border-radius: 12px;">
+                            <p style="color: var(--text-muted); font-size: 0.9rem; margin: 0;">No connections defined for this code yet.</p>
+                            <p style="color: var(--text-muted); font-size: 0.8rem; margin: 0.25rem 0 0;">Connect this code to others to show axial links.</p>
+                        </div>
+                    ` : ''}
+                    ${codeRels.map(rel => {
+            const isSource = rel.sourceCodeId === codeId;
+            const otherId = isSource ? rel.targetCodeId : rel.sourceCodeId;
+            const otherCode = window.currentProjectCodes.find(c => c.id === otherId);
+            if (!otherCode) return '';
+
+            return `
+                            <div style="background: white; border: 1px solid #e2e8f0; border-radius: 10px; padding: 1rem; display: flex; align-items: center; justify-content: space-between; box-shadow: 0 1px 2px rgba(0,0,0,0.03);">
+                                <div style="display: flex; align-items: center; gap: 1.25rem;">
+                                    <div style="display: flex; flex-direction: column; gap: 2px;">
+                                        <span style="font-size: 0.65rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted);">${escapeHtml(rel.type)}</span>
+                                        <div style="display: flex; align-items: center; gap: 0.5rem; background: #f1f5f9; padding: 0.35rem 0.6rem; border-radius: 6px;">
+                                            <div style="width: 8px; height: 8px; border-radius: 50%; background: ${otherCode.color};"></div>
+                                            <span style="font-weight: 600; font-size: 0.85rem; color: var(--text-title);">${escapeHtml(otherCode.name)}</span>
+                                        </div>
+                                    </div>
+                                </div>
+                                <button onclick="deleteRelationship('${rel.id}', '${codeId}')" style="background: none; border: none; padding: 6px; color: #94a3b8; cursor: pointer; border-radius: 6px; transition: all 0.2s;" onmouseover="this.style.background='#fef2f2'; this.style.color='#ef4444'" onmouseout="this.style.background='none'; this.style.color='#94a3b8'">
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2-2v2"></path></svg>
+                                </button>
+                            </div>
+                        `;
+        }).join('')}
+                </div>
+            </div>
+        `;
+
+        container.innerHTML = html;
+    } catch (e) {
+        console.error(e);
+        container.innerHTML = '<p style="color:red">Error loading connections</p>';
+    }
+}
+
+window.showAddRelationshipMenu = function (event, codeId) {
+    const types = ['causes', 'influences', 'contradicts', 'part of', 'related'];
+
+    // Filter out the current code from targets
+    const otherCodes = window.currentProjectCodes.filter(c => c.id !== codeId);
+
+    const menuHtml = `
+        <div id="relationship-menu" style="position: fixed; z-index: 10000; background: white; border: 1px solid #e2e8f0; border-radius: 12px; box-shadow: 0 10px 25px rgba(0,0,0,0.1); padding: 1rem; min-width: 240px; display: flex; flex-direction: column; gap: 0.75rem;">
+            <div style="font-size: 0.75rem; font-weight: 800; color: var(--text-muted); text-transform: uppercase;">New Connection</div>
+            
+            <div style="display: flex; flex-direction: column; gap: 0.5rem;">
+                <label style="font-size: 0.75rem; font-weight: 600; color: var(--text-muted);">Relationship Type</label>
+                <select id="rel-type" style="width: 100%; padding: 0.5rem; border-radius: 6px; border: 1px solid #cbd5e1; font-size: 0.85rem;">
+                    ${types.map(t => `<option value="${t}">${t.charAt(0).toUpperCase() + t.slice(1)}</option>`).join('')}
+                </select>
+            </div>
+            
+            <div style="display: flex; flex-direction: column; gap: 0.5rem;">
+                <label style="font-size: 0.75rem; font-weight: 600; color: var(--text-muted);">Target Code</label>
+                <select id="rel-target" style="width: 100%; padding: 0.5rem; border-radius: 6px; border: 1px solid #cbd5e1; font-size: 0.85rem;">
+                    ${otherCodes.map(c => `<option value="${c.id}">${escapeHtml(c.name)}</option>`).join('')}
+                </select>
+            </div>
+            
+            <div style="display: flex; justify-content: flex-end; gap: 0.5rem; margin-top: 0.5rem;">
+                <button onclick="document.getElementById('relationship-menu').remove()" class="btn-secondary small">Cancel</button>
+                <button onclick="addRelationship('${codeId}')" class="btn-primary small">Link</button>
+            </div>
+        </div>
+    `;
+
+    const old = document.getElementById('relationship-menu');
+    if (old) old.remove();
+
+    const div = document.createElement('div');
+    div.innerHTML = menuHtml;
+    const menu = div.firstElementChild;
+    document.body.appendChild(menu);
+
+    const rect = event.currentTarget.getBoundingClientRect();
+    menu.style.top = (rect.bottom + 10) + 'px';
+    menu.style.right = (window.innerWidth - rect.right) + 'px';
+
+    // Close on escape
+    const handleKey = (e) => {
+        if (e.key === 'Escape') {
+            menu.remove();
+            document.removeEventListener('keydown', handleKey);
+        }
+    };
+    document.addEventListener('keydown', handleKey);
+};
+
+window.addRelationship = async function (sourceCodeId) {
+    const type = document.getElementById('rel-type').value;
+    const targetCodeId = document.getElementById('rel-target').value;
+
+    if (!targetCodeId) return;
+
+    try {
+        await window.saveCodeRelationship(currentProjectId, {
+            sourceCodeId,
+            targetCodeId,
+            type
+        });
+        showToast('Relationship added');
+        document.getElementById('relationship-menu').remove();
+        renderAxialConnections(sourceCodeId);
+    } catch (e) {
+        console.error(e);
+        showToast('Failed to add connection', 'error');
+    }
+};
+
+window.deleteRelationship = async function (relId, codeId) {
+    // Delete function not in backend yet, I'll add a simple one if needed or just use Firestore directly here
+    // But for consistency I should add it to firebase-data.js.
+    // I'll assume I'll add it or just use db.collection directly for now to unblock.
+    try {
+        await db.collection('projects').doc(currentProjectId).collection('relationships').doc(relId).delete();
+        showToast('Relationship removed');
+        renderAxialConnections(codeId);
+    } catch (e) {
+        console.error(e);
+        showToast('Failed to remove connection', 'error');
+    }
+};
+
 
 // Add CSS for the View in Context indicator hover
 if (!document.getElementById('codeAnalysisStyles')) {
