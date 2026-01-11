@@ -1,20 +1,13 @@
 # Contexture - Qualitative Research & Transcription
 
-Contexture is a powerful, privacy-first web application designed for qualitative researchers to conduct interviews, transcribe audio in real-time, and perform advanced coding and analysis—all within a premium, modern interface.
+Contexture is a powerful, privacy-first web application designed for qualitative researchers to conduct interviews, transcribe audio in real-time and perform advanced coding and analysis—all within a premium, modern interface.
 
-
-## 🚀 Key Features
-
-*   **Live Transcription**: Real-time speech-to-text using the Web Speech API with multi-language support.
-*   **Precision Notes**: Take inline notes and highlights directly on the live transcript without interrupting the recording or losing words.
-*   **Qualitative Coding**: Create, organize, and apply axial codes to your research data.
-*   **Analysis Tools**: Visualize connections between codes with interactive network graphs (Vis.js).
-*   **PDF Import**: Import existing interview transcripts from PDF for coding and analysis.
-*   **Privacy-First Architecture**: Uses Firebase Anonymous Authentication—zero personal data required. Your data is tied to your browser session.
+> [!IMPORTANT]
+> **Google Chrome is required** for the live transcription and recording features. Other browsers (Firefox, Safari) do not support the necessary speech-to-text engines.
 
 ## 📥 Getting Started
 
-Contexture is designed to work **immediately** after cloning for trial and demonstration purposes.
+Contexture is designed to work immediately after cloning.
 
 1.  **Clone the repository**:
     ```bash
@@ -22,33 +15,11 @@ Contexture is designed to work **immediately** after cloning for trial and demon
     cd Final-Project-Vibe-Coding
     ```
 
-2.  **Run locally**:
-    Using npm:
-    ```bash
-    npm install
-    npm start
-    ```
-    Alternatively, using npx:
-    ```bash
-    npx serve .
-    ```
+2.  **How to run**:
+    *   **The Easy Way**: Just open `auth.html` directly in Google Chrome (Double-click the file).
+    *   **The Best Way**: For the most stable microphone experience, run a local server:
+        ```bash
+        npm install
+        npm start
+        ```
 
-### ☁️ Custom Firebase Setup (Recommended for Research)
-By default, the app uses a shared demonstration database. For actual research projects where you need to **own and protect your data**, you should set up your own Firebase instance:
-1.  Create a project in the [Firebase Console](https://console.firebase.google.com/).
-2.  Follow the instructions in `FIREBASE_SETUP.md` to enable Anonymous Auth and Firestore.
-3.  Update `firebase-config.js` with your own credentials.
-
-### Why not just open index.html?
-Browsers (especially Chrome) have strict security policies for the `file://` protocol. Running the app directly from a file may cause:
-*   Repeated microphone permission prompts.
-*   Speech recognition failure.
-*   Firebase Authentication issues.
-
-## 🎙 Browser Support
-*   **Google Chrome**: (Highly Recommended) Full support for Web Speech API and the most stable experience.
-*   **Microsoft Edge**: Supported (Chromium-based).
-*   **Safari/Firefox**: Limited support for real-time transcription features.
-
-## 📄 License
-This project was developed as part of the MXD Semester 2 - Vibe Coding curriculum.
