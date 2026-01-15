@@ -1,5 +1,5 @@
 # Contexture - Qualitative Research & Transcription
-
+somehow the guideline 
 Contexture is a powerful, privacy-first web application designed for qualitative researchers to conduct interviews, transcribe audio in real-time and perform advanced coding and analysis—all within a premium, modern interface.
 
 > [!IMPORTANT]

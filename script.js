@@ -1278,7 +1278,67 @@ if (pdfUploadInput) {
             for (let i = 1; i <= pdf.numPages; i++) {
                 const page = await pdf.getPage(i);
                 const textContent = await page.getTextContent();
-                const pageText = textContent.items.map(item => item.str).join('\n');
+
+                // Group text items by line using their y-coordinate
+                // This prevents splitting words like "Warm-Up" across lines
+                const lines = [];
+                let currentLine = [];
+                let currentY = null;
+                const yTolerance = 2; // Small tolerance for items on the same line
+
+                textContent.items.forEach((item, index) => {
+                    const itemY = item.transform[5]; // Y-coordinate
+
+                    // Check if this item is on a new line
+                    if (currentY === null || Math.abs(itemY - currentY) > yTolerance) {
+                        // New line - save previous line if it exists
+                        if (currentLine.length > 0) {
+                            lines.push(currentLine.join(''));
+                        }
+                        currentLine = [item.str];
+                        currentY = itemY;
+                    } else {
+                        // Same line - determine if we need to add a space
+                        const prevItem = textContent.items[index - 1];
+                        const currentStr = item.str;
+                        const prevStr = prevItem ? prevItem.str : '';
+
+                        // Don't add space if:
+                        // 1. Previous item ends with a hyphen/dash OR current starts with hyphen
+                        // 2. Current item IS a hyphen/dash (single character)
+                        // 3. Previous or current has whitespace already
+                        // 4. Previous is single uppercase letter and current starts lowercase (word fragment: "I" + "ntroduction")
+                        // 5. Previous ends uppercase and current starts lowercase and both are very short (likely split word)
+
+                        const isHyphen = /^[\-–—]$/.test(currentStr) || /^[\-–—]$/.test(prevStr);
+                        const hasHyphen = /[\-–—]$/.test(prevStr) || /^[\-–—]/.test(currentStr);
+                        const hasWhitespace = /\s$/.test(prevStr) || /^\s/.test(currentStr);
+
+                        // Detect word fragments: single uppercase letter followed by lowercase
+                        const isSingleUppercase = /^[A-Z]$/.test(prevStr);
+                        const startsLowercase = /^[a-z]/.test(currentStr);
+                        const isWordFragment = isSingleUppercase && startsLowercase;
+
+                        // Also check for uppercase ending followed by lowercase start (short fragments)
+                        const endsUppercase = /[A-Z]$/.test(prevStr);
+                        const isShortFragment = endsUppercase && startsLowercase && prevStr.length <= 2 && !/\s/.test(prevStr);
+
+                        if (isHyphen || hasHyphen || hasWhitespace || isWordFragment || isShortFragment) {
+                            // No space needed - just concatenate
+                            currentLine.push(currentStr);
+                        } else {
+                            // Add space between words
+                            currentLine.push(' ' + currentStr);
+                        }
+                    }
+                });
+
+                // Don't forget the last line
+                if (currentLine.length > 0) {
+                    lines.push(currentLine.join(''));
+                }
+
+                const pageText = lines.join('\n');
                 extractedText += pageText + '\n';
             }
 
@@ -1299,7 +1359,7 @@ if (pdfUploadInput) {
             if (parsedQuestions.length > 0) {
                 parsedQuestions.forEach(q => {
                     addQuestionInput({
-                        text: cleanQuestionText(q.text),
+                        text: q.text, // Keep main question text as-is (with numbering)
                         subquestions: q.subquestions.map(sq => cleanQuestionText(sq))
                     }, false);
                 });
@@ -1319,6 +1379,37 @@ if (pdfUploadInput) {
     });
 }
 
+/**
+ * Clean up question text by removing numbering, bullets, and other markers
+ * while preserving the actual question content
+ */
+function cleanQuestionText(text) {
+    if (!text) return '';
+
+    let cleaned = text.trim();
+
+    // Remove common numbering patterns at the start:
+    // "1. Question" -> "Question"
+    // "1) Question" -> "Question"
+    // "I. Question" -> "Question"
+    // "Q1: Question" -> "Question"
+    cleaned = cleaned.replace(/^(?:\d+|[IVX]+|[A-Z])[\.\)]\s+/, '');
+    cleaned = cleaned.replace(/^Q\d+[\:\s]+/i, '');
+    cleaned = cleaned.replace(/^(?:Question|Topic|Section)\s*\d*[\:\s]+/i, '');
+
+    // Remove bullet points at the start:
+    // "• Question" -> "Question"
+    // "- Question" -> "Question"
+    // "* Question" -> "Question"
+    // "1.1 Question" -> "Question"
+    // "a) Question" -> "Question"
+    cleaned = cleaned.replace(/^[\s\t]*[•\-\–\—\*·◦▪▫\u2022\u2023\u25E6\u2043\u2219]\s+/, '');
+    cleaned = cleaned.replace(/^[\s\t]*\d+\.\d+\s+/, '');
+    cleaned = cleaned.replace(/^[\s\t]*[a-z][\.\)]\s+/i, '');
+
+    return cleaned.trim();
+}
+
 // { projectId, guidelineId? }
 function parsePdfContent(text) {
     const lines = text.split(/\n+/).map(l => l.trim()).filter(l => l.length > 0);
@@ -1327,27 +1418,42 @@ function parsePdfContent(text) {
     let nextIsSub = false;
     let orphanPrefix = ''; // Store "1.1" or "-" from previous line
 
-    // --- PATTERNS ---
+    // --- ENHANCED PATTERNS ---
 
-    // 1. Level 1: Main Questions
+    // 1. Main Questions: Various numbering schemes
+    // Matches: "1. ", "1) ", "Q1 ", "Question 1:", "A. ", "I. ", etc.
     const mainExplicitPattern = /^(?:(?:\d+|[IVX]+|[A-Z])[\.\)]|Q\d+|Question\s*\d*:?|Topic\s*\d*:?|Section\s*\d*:?)\s+(.+)/i;
 
-    // 2. Level 2: Sub-questions
-    // Forms: Bullets, "1.1", "a)", "(a)"
-    const subExplicitPattern = /^[\s\t]*([•\-\–\—\*·◦▪▫\u2022\u2023\u25E6\u2043\u2219]|\d+\.\d+|[a-z]\s*\)|[a-z]\s*\.|[ivx]+\.|[A-Z]\.)\s+(.+)/i;
+    // 2. Sub-questions: Bullets, nested numbers, lowercase letters
+    // Matches: "•", "-", "1.1", "a)", "a.", "(a)", "i.", etc.
+    // IMPORTANT: We need to distinguish between bullet "-" and in-text hyphen
+    const subExplicitPattern = /^[\s\t]*([•\–\—\*·◦▪▫\u2022\u2023\u25E6\u2043\u2219]|\d+\.\d+|[a-z]\s*\)|[a-z]\s*\.|[ivx]+\.|[A-Z]\.|\([a-z]\))\s+(.+)/i;
 
-    // Orphan Bullet/Number Only (e.g. "-", "1.1", "a)") on its own line
-    // Removed "-" from strict orphan check if it's potentially a hyphenation
+    // 3. Orphan Bullet/Number Only (on its own line)
+    // Matches lines containing ONLY the prefix, no content after it
     const subBulletOnly = /^[\s\t]*([•\–\—\*·◦▪▫\u2022\u2023\u25E6\u2043\u2219]|\d+\.\d+|[a-z]\s*\)|[a-z]\s*\.|[ivx]+\.|[A-Z]\.)[\s\t]*$/i;
 
-    // Helper to check if line looks like a question
+    // Helper: Check if line looks like a question
     const isQuestion = (str) => str.trim().endsWith('?');
 
-    // Helper to check if it's likely a hyphenated continuation (e.g. "- up")
-    // Broader check for any dash-like char followed by space/lowercase
-    const isHyphenation = (line) => {
-        // Include all bullet/dash chars from subExplicitPattern just in case
-        return /^[•\-\–\—\*·◦▪▫\u2022\u2023\u25E6\u2043\u2219]\s*[a-z]/.test(line);
+    // Helper to detect if a line is a continuation of a hyphenated word split across lines
+    // TRUE HYPHENATION CASES to detect:
+    //   Line 1: "follow"          Line 2: "- up"      -> Should merge to "follow-up"
+    //   Line 1: "Warm"            Line 2: "- Up"      -> Should merge to "Warm-Up"  
+    //   Line 1: "text-"           Line 2: "word"      -> Should merge to "text-word"
+    // FALSE POSITIVES to AVOID:
+    //   Line 1: "Main topic:"     Line 2: "- subtopic" -> Should NOT merge (this is a bullet)
+    const isLikelyHyphenation = (currentLine, prevLine) => {
+        // If current line starts with dash and lowercase letter WITH NO SPACE or minimal space
+        // Example: "-up" or "- up" where "up" is lowercase
+        if (/^[\-\–\—]\s*[a-z]/.test(currentLine)) {
+            // Check if previous line doesn't end with punctuation (sentence enders)
+            // and doesn't end with colon (which often precedes lists)
+            if (!/[.?!:]$/.test(prevLine)) {
+                return true;
+            }
+        }
+        return false;
     };
 
     lines.forEach((line, index) => {
@@ -1359,70 +1465,72 @@ function parsePdfContent(text) {
         // -- STATE: Expecting Sub-question (Orphan Bullet from previous line) --
         if (nextIsSub && currentQuestion) {
             const combined = orphanPrefix ? `${orphanPrefix} ${trimmed}` : trimmed;
-            console.log('  -> Orphan merge:', combined);
+            console.log('  -> Orphan bullet merge:', combined);
             currentQuestion.subquestions.push(combined);
             nextIsSub = false;
             orphanPrefix = '';
             return;
         }
 
-        // -- SPECIAL CHECK: Hyphenation / Multi-line Split --
+        // -- HYPHENATION CHECK: Word split across lines --
+        // Check if this line continues a previous line via hyphenation
         if (currentQuestion && currentQuestion.subquestions.length > 0) {
             const lastSubIdx = currentQuestion.subquestions.length - 1;
             const lastSub = currentQuestion.subquestions[lastSubIdx];
 
-            console.log(`  -> Checking hyphenation. Last sub: "${lastSub}"`);
-            console.log(`  -> Test 1 (non-alphanum): ${/^[^a-z0-9]/i.test(trimmed)}`);
-            console.log(`  -> Test 2 (non-word+lower): ${/^[^\w]\s*[a-z]/.test(trimmed)}`);
+            console.log(`  -> Checking for hyphenation. Last sub: "${lastSub}"`);
 
-            // SPECIAL CASE: Lone hyphen/dash on its own line (e.g., Line 21: "-")
-            // This is part of a hyphenated word split across 3 lines: "follow" / "-" / "up..."
+            // Case 1: Previous line ends with hyphen (e.g., "text-")
+            // Current line starts with lowercase letter
+            if (lastSub.endsWith('-') && /^[a-z]/.test(trimmed)) {
+                console.log('  -> Type 1 hyphenation: Previous ends with "-", merging');
+                currentQuestion.subquestions[lastSubIdx] = lastSub + trimmed;
+                console.log(`  -> Result: "${currentQuestion.subquestions[lastSubIdx]}"`);
+                return;
+            }
+
+            // Case 2: Lone hyphen on its own line (rare but possible)
             if (/^[\-\–\—]$/.test(trimmed)) {
-                console.log('  -> Lone hyphen detected, appending to previous line');
-                // Just append the dash to the previous line, don't add as new question
-                // The NEXT line will be the continuation
+                console.log('  -> Lone hyphen detected, appending to previous');
                 currentQuestion.subquestions[lastSubIdx] = lastSub + '-';
                 return;
             }
 
-            // Hyphenation detection: dash/bullet followed by lowercase on SAME line
-            // Regex: Starts with anything that is NOT a letter/number (e.g. - . • *), optional space, then lowercase.
-            if (/^[^a-z0-9]/i.test(trimmed) && /^[^\w]\s*[a-z]/.test(trimmed)) {
-                // It starts with a non-word char and continues with lowercase.
-                // It is almost certainly a continuation "follow" + "- up".
-                console.log('  -> MERGING hyphenation:', trimmed);
-
-                // Remove the prefix (all non-word chars and spaces)
-                const appendText = trimmed.replace(/^[^\w]+\s*/, '');
-
-                // Use dash separator to reconstruct "follow-up"
+            // Case 3: Current line starts with "- word" where word is lowercase
+            // AND previous line doesn't suggest a list is starting
+            if (isLikelyHyphenation(trimmed, lastSub)) {
+                console.log('  -> Type 3 hyphenation: Line starts with "- lowercase"');
+                // Remove the leading dash and optional spaces
+                const appendText = trimmed.replace(/^[\-\–\—]\s*/, '');
                 currentQuestion.subquestions[lastSubIdx] = lastSub + '-' + appendText;
                 console.log(`  -> Result: "${currentQuestion.subquestions[lastSubIdx]}"`);
                 return;
             }
 
-            // Standard continuation check (no dash, just lowercase text)
-            // e.g. "Question text..." \n "that continues here."
+            // Case 4: Standard continuation (no hyphen, but line continues)
+            // Previous doesn't end with sentence-ending punctuation
+            // Current starts with lowercase
             if (!/[.?!]$/.test(lastSub) && /^[a-z]/.test(trimmed)) {
-                console.log('  -> Standard continuation merge');
-                currentQuestion.subquestions[lastSubIdx] = lastSub + ' ' + trimmed;
-                return;
+                // Make sure it's not a bullet point that happens to start lowercase
+                // Check it doesn't match the sub-question pattern
+                if (!subExplicitPattern.test(trimmed)) {
+                    console.log('  -> Standard continuation (no punctuation end, lowercase start)');
+                    currentQuestion.subquestions[lastSubIdx] = lastSub + ' ' + trimmed;
+                    return;
+                }
             }
         }
 
         // -- CHECK 1: Explicit Sub-question Markers --
+        // This will match bullets and sub-numbering like "- text", "• text", "1.1 text"
         const subMatch = trimmed.match(subExplicitPattern);
-
-        // Safety: If it matched a dash bullet, but follows with lowercase...
-        // ...we should have caught it in isHyphenation above! 
-        // If we are here, it is NOT hyphenation.
-
         if (subMatch) {
             console.log('  -> Matched as explicit sub-question');
             if (currentQuestion) {
                 currentQuestion.subquestions.push(trimmed);
             } else {
-                currentQuestion = { text: trimmed, subquestions: [] };
+                // Edge case: sub-question before any main question
+                currentQuestion = { text: '', subquestions: [trimmed] };
             }
             return;
         }
@@ -1430,51 +1538,34 @@ function parsePdfContent(text) {
         // -- CHECK 2: Main Question Markers --
         const mainMatch = trimmed.match(mainExplicitPattern);
         if (mainMatch) {
+            console.log('  -> Matched as main question');
             if (currentQuestion) questions.push(currentQuestion);
             currentQuestion = { text: trimmed, subquestions: [] };
             return;
         }
 
-        // -- CHECK 3: Visual/Implicit Markers --
-
-        // Orphan Bullet/Number
+        // -- CHECK 3: Orphan Bullet/Number (marker alone on line) --
         if (subBulletOnly.test(trimmed)) {
-            // Check if it's potentially a hyphenation start (like just "-") that got split from "up"?
-            // Unlikely to have just "-" on a line for hyphenation, usually "- up".
-            // But if it is JUST a dash, it really looks like a split bullet.
-
-            // Double check it's not a numbered bullet like "1.1" which we want to keep
-            // If it's just a single dash, and the next line starts with lowercase, it's likely hyphenation.
-            // But if it's just a dash on its own line, it's more likely an orphan bullet.
-            // The `isHyphenation` check above handles the `- up` case.
-            // This `subBulletOnly` is for cases like `1.1` or `a)` or `•` on its own line.
-            // We want to avoid `subBulletOnly` catching a lone `-` if it's part of a hyphenated word.
-            // The current `subBulletOnly` regex already excludes a lone `-` if it's not followed by a space.
-            // The `isHyphenation` regex handles `- ` followed by a lowercase letter.
-            // So, if we reach here with just `-` it's treated as an orphan bullet.
+            console.log('  -> Orphan bullet/number marker, expecting text on next line');
             nextIsSub = true;
             orphanPrefix = trimmed;
             return;
         }
 
-        // Implicit Sub-question
+        // -- CHECK 4: Implicit Sub-question or Fallback --
         if (currentQuestion) {
-            if (isQuestion(trimmed)) {
-                currentQuestion.subquestions.push(trimmed);
-                return;
-            }
-            // Fallback
+            // If we have a current question, treat this as a sub-question
+            console.log('  -> Adding as implicit sub-question');
             currentQuestion.subquestions.push(trimmed);
             return;
         }
 
-        // -- CHECK 4: Initial Fallback --
-        if (isQuestion(trimmed)) {
-            currentQuestion = { text: trimmed, subquestions: [] };
-            return;
-        }
+        // -- CHECK 5: Initial Fallback - treat as main question --
+        console.log('  -> No pattern matched, creating as main question');
+        currentQuestion = { text: trimmed, subquestions: [] };
     });
 
+    // Don't forget the last question
     if (currentQuestion) {
         questions.push(currentQuestion);
     }
