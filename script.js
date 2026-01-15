@@ -280,10 +280,7 @@ newProjectNameInput.addEventListener('keydown', (e) => {
 });
 
 // Delete Modal Listeners
-// These were missing!
-if (confirmDeleteBtn) confirmDeleteBtn.addEventListener('click', confirmDeleteAction);
-if (cancelDeleteBtn) cancelDeleteBtn.addEventListener('click', closeDeleteModal);
-if (closeDeleteModalIcon) closeDeleteModalIcon.addEventListener('click', closeDeleteModal);
+// (Listeners are already attached in DOMContentLoaded, removing duplicates)
 
 // Code Modal Listeners
 const createCodeBtn = document.getElementById('createCodeBtn');
@@ -1033,28 +1030,28 @@ async function confirmDeleteAction() {
     console.log('itemToDelete:', itemToDelete);
     console.log('projectIdToDelete (legacy):', projectIdToDelete);
 
-    if (!itemToDelete) {
-        // Fallback for legacy projectIdToDelete if exists (though we replaced calls, safety check)
-        if (projectIdToDelete) {
-            console.log('Using legacy delete for project:', projectIdToDelete);
-            try {
+    if (confirmDeleteBtn) {
+        confirmDeleteBtn.disabled = true;
+        confirmDeleteBtn.textContent = 'Deleting...';
+    }
+
+    try {
+        if (!itemToDelete) {
+            // Fallback for legacy projectIdToDelete if exists (though we replaced calls, safety check)
+            if (projectIdToDelete) {
+                console.log('Using legacy delete for project:', projectIdToDelete);
                 await window.deleteProjectFromFirestore(projectIdToDelete);
                 projects = projects.filter(p => p.id !== projectIdToDelete);
                 if (currentProjectId === projectIdToDelete) closeProject();
                 else render();
                 showToast('Project deleted');
-            } catch (error) {
-                console.error('Error deleting project:', error);
-                alert('Failed to delete project. Please try again.');
             }
+            closeDeleteModal();
+            return;
         }
-        closeDeleteModal();
-        return;
-    }
 
-    if (itemToDelete.type === 'project') {
-        console.log('Deleting project via itemToDelete:', itemToDelete.id);
-        try {
+        if (itemToDelete.type === 'project') {
+            console.log('Deleting project via itemToDelete:', itemToDelete.id);
             await window.deleteProjectFromFirestore(itemToDelete.id);
             projects = projects.filter(p => p.id !== itemToDelete.id);
             if (currentProjectId === itemToDelete.id) {
@@ -1063,14 +1060,9 @@ async function confirmDeleteAction() {
                 render();
             }
             showToast('Project deleted');
-        } catch (error) {
-            console.error('Error deleting project:', error);
-            alert('Failed to delete project. Please try again.');
         }
-    }
-    else if (itemToDelete.type === 'guideline') {
-        const project = projects.find(p => p.id === itemToDelete.projectId);
-        try {
+        else if (itemToDelete.type === 'guideline') {
+            const project = projects.find(p => p.id === itemToDelete.projectId);
             await window.deleteGuidelineFromFirestore(itemToDelete.id);
 
             if (project && project.guidelines) {
@@ -1078,34 +1070,30 @@ async function confirmDeleteAction() {
                 renderGuidelinesList(project);
             }
             showToast('Guideline deleted');
-        } catch (error) {
-            console.error('Error deleting guideline:', error);
-            alert('Failed to delete guideline');
         }
-    }
-    else if (itemToDelete.type === 'interview') {
-        try {
+        else if (itemToDelete.type === 'interview') {
             await window.deleteInterviewFromFirestore(itemToDelete.id);
             showToast('Interview deleted');
             // itemToDelete.projectId is passed when deleting interview
             if (itemToDelete.projectId) {
                 renderInterviewsList(itemToDelete.projectId);
             }
-        } catch (error) {
-            console.error('Error deleting interview:', error);
-            showToast('Failed to delete interview', 'error');
         }
-    }
-    else if (itemToDelete.type === 'code') {
-        try {
+        else if (itemToDelete.type === 'code') {
             await performDeleteCode(itemToDelete.id);
-        } catch (error) {
-            console.error('Error deleting code:', error);
-            showToast('Failed to delete code', 'error');
+        }
+
+        closeDeleteModal();
+
+    } catch (error) {
+        console.error('Error in confirmDeleteAction:', error);
+        alert('Failed to delete item. Please try again.');
+    } finally {
+        if (confirmDeleteBtn) {
+            confirmDeleteBtn.disabled = false;
+            confirmDeleteBtn.textContent = 'Delete';
         }
     }
-
-    closeDeleteModal();
 }
 
 // --- CREATE MODAL ---
