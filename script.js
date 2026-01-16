@@ -4305,9 +4305,6 @@ function renderReview() {
         }
     });
 
-    // Scroll to top
-    reviewFeed.scrollTop = 0;
-
     // Apply visual code assignments
     if (window.applyCodeAssignments) {
         window.applyCodeAssignments();
