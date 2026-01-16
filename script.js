@@ -1552,7 +1552,25 @@ function parsePdfContent(text) {
             return;
         }
 
-        // -- CHECK 4: Implicit Sub-question or Fallback --
+        // -- CHECK 4: Main Question Continuation --
+        // If current question exists but has no sub-questions yet, and this line doesn't look like a sub-question marker,
+        // it's likely a continuation of the main question text (text that wrapped to next line in PDF)
+        if (currentQuestion && currentQuestion.subquestions.length === 0) {
+            // Check if the current question text doesn't end with punctuation (incomplete sentence)
+            // AND the new line starts with lowercase (continuation) or is short
+            const lastQuestionText = currentQuestion.text;
+            const endsWithPunctuation = /[.?!:]$/.test(lastQuestionText);
+            const startsLowercase = /^[a-z]/.test(trimmed);
+
+            // If main question doesn't end properly and this looks like a continuation
+            if (!endsWithPunctuation && (startsLowercase || trimmed.length < 60)) {
+                console.log('  -> Merging as main question continuation');
+                currentQuestion.text += ' ' + trimmed;
+                return;
+            }
+        }
+
+        // -- CHECK 5: Implicit Sub-question or Fallback --
         if (currentQuestion) {
             // If we have a current question, treat this as a sub-question
             console.log('  -> Adding as implicit sub-question');
@@ -1560,7 +1578,7 @@ function parsePdfContent(text) {
             return;
         }
 
-        // -- CHECK 5: Initial Fallback - treat as main question --
+        // -- CHECK 6: Initial Fallback - treat as main question --
         console.log('  -> No pattern matched, creating as main question');
         currentQuestion = { text: trimmed, subquestions: [] };
     });
@@ -3783,8 +3801,10 @@ async function loadCodesForReview() {
         currentReviewCodes = await window.loadCodesForProject(currentProjectId);
         if (currentInterviewId) {
             currentCodeAssignments = await window.loadCodeAssignments(currentInterviewId);
-            // Re-render to show highlights on transcript
-            renderReview();
+            // Re-apply code assignments without rebuilding the entire transcript
+            if (window.applyCodeAssignments) {
+                window.applyCodeAssignments();
+            }
         }
         renderReviewCodesSidebar();
     } catch (error) {
@@ -5359,18 +5379,25 @@ function createReviewSegmentElement(segment) {
 
     // Repair malformed HTML from previous bug (spaces in tags)
     if (html) {
-        html = html.replace(/< mark/g, '<mark')
+        html = html.replace(/<mark/g, '<mark')
             .replace(/data - segment - id/g, 'data-segment-id')
             .replace(/data - highlight - start/g, 'data-highlight-start')
             .replace(/data - note/g, 'data-note')
             .replace(/" >/g, '">')
             .replace(/<\/mark >/g, '</mark>');
+
+        // Clean up multiple consecutive spaces in text nodes (preserve single spaces in HTML tags)
+        // This regex finds spaces outside of HTML tags
+        html = html.replace(/(\>[^<]+)/g, (match) => {
+            return match.replace(/  +/g, ' ');
+        });
     }
 
     // If no stored HTML, construct it from text + highlights (Legacy/Plain Text Mode)
     if (!html) {
         let lastIndex = 0;
-        const text = segment.text;
+        // Clean up multiple consecutive spaces in the text
+        const text = (segment.text || '').replace(/  +/g, ' ');
         const sortedHighlights = [...(segment.highlights || [])].sort((a, b) => a.start - b.start);
 
         sortedHighlights.forEach(h => {
