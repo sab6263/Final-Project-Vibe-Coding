@@ -90,6 +90,8 @@ let lastSegmentEndTime = null;
 let currentSpeaker = 'interviewer';
 let speakerIdActive = false; // Default to false to match UI behavior
 let lastProcessedIndex = -1; // Shared recognition state
+let recognitionSessionId = 0; // Track which recognition session we're in
+let manuallyCommittedText = new Set(); // Track text we've manually committed to prevent duplicates
 let isInterimSelecting = false; // To pause UI updates during selection
 let reviewCodingMode = false;
 let currentReviewCodes = [];
@@ -2434,7 +2436,12 @@ async function loadInterviewView(interviewId) {
     try {
         const interview = await window.loadInterviewFromFirestore(interviewId);
         if (interview) {
+            // Restore currentProjectId from the interview data
+            if (interview.projectId) {
+                currentProjectId = interview.projectId;
+            }
             interviewDetailTitle.textContent = interview.title;
+
 
             // Load Guideline for the sidebar
             if (interview.guidelineId) {
@@ -2448,19 +2455,31 @@ async function loadInterviewView(interviewId) {
                     const fullGuideline = fullGuidelines.find(g => g.id === interview.guidelineId);
 
                     if (fullGuideline && fullGuideline.questions) {
-                        workspaceQuestionsList.innerHTML = fullGuideline.questions.map(q => `
+                        workspaceQuestionsList.innerHTML = fullGuideline.questions.map((q, index) => {
+                            // Ensure clean text and strip existing numbering if present to avoid "1. 1. Intro"
+                            // Regex Explanation:
+                            // ^\s*       -> Start of string, optional whitespace
+                            // \d+        -> One or more digits
+                            // \s*        -> Optional whitespace (fixes "1 .")
+                            // [\.\)]?    -> Optional dot or closing parenthesis
+                            // \s*        -> Optional whitespace after
+                            let text = typeof cleanQuestionText === 'function' ? cleanQuestionText(q.text) : q.text;
+                            text = text.replace(/^\s*\d+\s*[\.\)]?\s*/, '');
+
+                            return `
                 <div class="guideline-q-item" onclick="toggleGuidelineQuestion(this)">
                                 <div class="q-checkbox"></div>
                                 <div class="q-content">
-                                    <span class="q-text">${escapeHtml(cleanQuestionText(q.text))}</span>
+                                    <span class="q-text">${index + 1}. ${escapeHtml(text)}</span>
                                     ${q.subquestions && q.subquestions.length > 0 ? `
                                         <ul style="margin-top: 0.5rem; padding-left: 1.25rem; font-weight: normal; font-size: 0.85rem; color: var(--text-muted); list-style-type: disc;">
-                                            ${q.subquestions.map(sq => `<li>${escapeHtml(cleanQuestionText(sq))}</li>`).join('')}
+                                            ${q.subquestions.map(sq => `<li>${escapeHtml(typeof cleanQuestionText === 'function' ? cleanQuestionText(sq) : sq)}</li>`).join('')}
                                         </ul>
                                     ` : ''}
                                 </div>
                             </div>
-                `).join('');
+                `;
+                        }).join('');
                     } else {
                         workspaceQuestionsList.innerHTML = '<p style="color: var(--text-muted);">No questions found.</p>';
                     }
@@ -2594,6 +2613,7 @@ async function startInterview() {
     if (!startTime) {
         startTime = Date.now();
         transcriptionFeed.innerHTML = '';
+        manuallyCommittedText.clear(); // Clear any stale manually committed text tracking
     }
 
     isRecording = true;
@@ -2647,6 +2667,17 @@ function toggleSpeaker() {
 }
 
 function pauseInterview() {
+    // CRITICAL: Commit any interim text before pausing so it doesn't get lost
+    const interimEl = document.getElementById('interimSegment');
+    if (interimEl) {
+        const interimText = interimEl.textContent.trim();
+        if (interimText) {
+            console.log('💾 Saving interim text before pause:', interimText);
+            addTranscriptSegment(interimText);
+            interimEl.remove(); // Clean up the interim element
+        }
+    }
+
     isPaused = true;
 
     // UI Updates: Turn into Continue button
@@ -2662,11 +2693,13 @@ function pauseInterview() {
     recordingStatus.parentElement.classList.remove('active');
 
     stopTimer();
-    // Keep transcription running in silent mode (isPaused checked in onresult)
+    stopTranscription(); // Actually stop transcription to prevent recording while paused
 }
 
 function resumeInterview() {
     isPaused = false;
+
+    console.log('📝 RESUMING - Segments count:', transcriptSegments.length);
 
     // UI Updates: Turn back into Pause button
     startRecordingBtn.classList.remove('btn-start');
@@ -2681,6 +2714,7 @@ function resumeInterview() {
     recordingStatus.parentElement.classList.add('active');
 
     startTimer();
+    startTranscription(); // Restart transcription after pause
 }
 
 
@@ -2844,87 +2878,107 @@ async function startTranscription() {
         recognition = null;
     }
 
-    if (!recognition) {
-        // APPLY PENDING SPEAKER SWITCH
-        // If we stopped previously to switch speakers, apply it now before next segment starts
-        if (window.pendingSpeakerSwitch) {
-            currentSpeaker = window.pendingSpeakerSwitch;
-            window.pendingSpeakerSwitch = null;
-        }
+    // Create new recognition object (recognition should be null if we're resuming from pause)
+    // APPLY PENDING SPEAKER SWITCH
+    // If we stopped previously to switch speakers, apply it now before next segment starts
+    if (window.pendingSpeakerSwitch) {
+        currentSpeaker = window.pendingSpeakerSwitch;
+        window.pendingSpeakerSwitch = null;
+    }
 
-        recognition = new SpeechRecognition();
-        recognition.continuous = true;
-        recognition.interimResults = true; // RE-ENABLE for real-time feedback
-        recognition.lang = selectedLang;
+    recognition = new SpeechRecognition();
+    recognition.continuous = true;
+    recognition.interimResults = true; // RE-ENABLE for real-time feedback
+    recognition.lang = selectedLang;
 
-        lastProcessedIndex = -1;
+    // Increment session ID and reset index tracking for this new session
+    // Each recognition session has its own result indices starting from 0
+    recognitionSessionId++;
+    lastProcessedIndex = -1;
 
-        recognition.onresult = (event) => {
-            if (isPaused) return;
+    recognition.onresult = (event) => {
+        if (isPaused) return;
 
-            // Update processed index if the engine reset (e.g. on restart)
-            if (event.resultIndex < lastProcessedIndex) {
-                lastProcessedIndex = -1;
-            }
+        let interimTranscript = '';
+        let hasFinalResults = false;
 
-            let interimTranscript = '';
+        // Process results from the current recognition session
+        // Note: When resuming from pause, we start a NEW session so event.resultIndex starts at 0
+        // We process these new results normally without resetting lastProcessedIndex from before pause
+        for (let i = 0; i < event.results.length; ++i) {
+            const transcript = event.results[i][0].transcript;
 
-            // ALWAYS loop from 0 to capture all interim parts correctly,
-            // even if resultIndex shifts forward.
-            for (let i = 0; i < event.results.length; ++i) {
-                // Skip results already handled (either naturally or manually committed)
-                if (i <= lastProcessedIndex) continue;
-
-                const transcript = event.results[i][0].transcript;
-                if (event.results[i].isFinal) {
-                    addTranscriptSegment(transcript);
-                    lastProcessedIndex = i;
-                } else {
+            if (event.results[i].isFinal) {
+                // Only process if this is a NEW final result we haven't seen before
+                // lastProcessedIndex tracks the highest consecutive index we've processed
+                if (i > lastProcessedIndex) {
+                    // Check if we manually committed this exact text already
+                    const trimmedTranscript = transcript.trim();
+                    if (manuallyCommittedText.has(trimmedTranscript)) {
+                        // Skip adding it again, but mark it as processed
+                        manuallyCommittedText.delete(trimmedTranscript);
+                        if (i === lastProcessedIndex + 1) {
+                            lastProcessedIndex = i;
+                        }
+                    } else {
+                        addTranscriptSegment(transcript);
+                        // Only update lastProcessedIndex if this is the next consecutive result
+                        if (i === lastProcessedIndex + 1) {
+                            lastProcessedIndex = i;
+                        }
+                        hasFinalResults = true;
+                    }
+                }
+            } else {
+                // Accumulate ALL interim (non-final) results that haven't been finalized
+                if (i > lastProcessedIndex) {
                     interimTranscript += transcript;
                 }
             }
+        }
 
-            // Capture length for manual commit logic
-            window.lastSpeechResultsLength = event.results.length;
+        // Capture length for manual commit logic
+        window.lastSpeechResultsLength = event.results.length;
 
-            // Show real-time text (styled as normal text via CSS)
-            // But PAUSE updates if user is currently selecting to prevent jumping
-            if (!isInterimSelecting) {
-                updateInterimDisplay(interimTranscript);
-            }
-        };
+        // Show real-time text (styled as normal text via CSS)
+        // But PAUSE updates if user is currently selecting to prevent jumping
+        if (!isInterimSelecting) {
+            updateInterimDisplay(interimTranscript);
+        }
+    };
 
-        recognition.onend = () => {
-            if (isRecording) {
-                // Small delay to prevent "restart too fast" errors and ensure clean state
-                setTimeout(() => {
-                    // APPLY PENDING SPEAKER SWITCH (Critical for toggleSpeaker logic)
-                    if (window.pendingSpeakerSwitch) {
-                        currentSpeaker = window.pendingSpeakerSwitch;
-                        window.pendingSpeakerSwitch = null;
+    recognition.onend = () => {
+        // Only auto-restart if we're actively recording AND not paused
+        if (isRecording && !isPaused) {
+            // Small delay to prevent "restart too fast" errors and ensure clean state
+            setTimeout(() => {
+                // APPLY PENDING SPEAKER SWITCH (Critical for toggleSpeaker logic)
+                if (window.pendingSpeakerSwitch) {
+                    currentSpeaker = window.pendingSpeakerSwitch;
+                    window.pendingSpeakerSwitch = null;
+                }
+
+                // Double-check we're still recording and not paused before restarting
+                if (isRecording && !isPaused && recognition) {
+                    try {
+                        recognition.start();
+                    } catch (e) {
+                        console.warn('Recognition restart failed, retrying...', e);
                     }
+                }
+            }, 200);
+        }
+    };
 
-                    if (isRecording) {
-                        try {
-                            recognition.start();
-                        } catch (e) {
-                            console.warn('Recognition restart failed, retrying...', e);
-                        }
-                    }
-                }, 200);
-            }
-        };
-
-        recognition.onerror = (event) => {
-            console.error('Speech recognition error:', event.error);
-            if (event.error === 'not-allowed') {
-                alert('Microphone access was denied. Please check your browser settings.');
-                isRecording = false; // Force stop state to prevent infinite loop
-                stopTimer();
-            }
-            // Ignore 'no-speech' errors as they are normal during pauses
-        };
-    }
+    recognition.onerror = (event) => {
+        console.error('Speech recognition error:', event.error);
+        if (event.error === 'not-allowed') {
+            alert('Microphone access was denied. Please check your browser settings.');
+            isRecording = false; // Force stop state to prevent infinite loop
+            stopTimer();
+        }
+        // Ignore 'no-speech' errors as they are normal during pauses
+    };
 
     try {
         recognition.start();
@@ -2965,6 +3019,7 @@ function toggleSpeaker() {
 function stopTranscription() {
     if (recognition) {
         recognition.stop();
+        recognition = null; // Set to null to prevent onend from auto-restarting
     }
 }
 
@@ -2974,7 +3029,26 @@ let lastLoggedSpeaker = null;
 function addTranscriptSegment(text) {
     if (!text.trim()) return;
 
+    // CRITICAL: Prevent duplicate consecutive segments
+    // This catches race conditions where manual commit and auto-finalization happen simultaneously
     const now = Date.now();
+
+    if (transcriptSegments.length > 0) {
+        const lastSegment = transcriptSegments[transcriptSegments.length - 1];
+        // lastSegment.timestamp is relative to startTime, so convert to absolute time
+        const lastSegmentAbsoluteTime = startTime + lastSegment.timestamp;
+        const timeSinceLastSegment = now - lastSegmentAbsoluteTime;
+
+        // If the last segment has the exact same text (trimmed) and was added recently (within 3 seconds),
+        // this is likely a duplicate from race condition - skip it
+        if (lastSegment.text.trim() === text.trim() && timeSinceLastSegment < 3000) {
+            console.log('🚫 DUPLICATE DETECTED - Skipping duplicate segment:', text.trim());
+            console.log('   Time since last:', timeSinceLastSegment, 'ms');
+            console.log('   Last segment ID:', lastSegment.id);
+            return;
+        }
+    }
+
     const pauseThreshold = 2000; // 2 seconds silence = new line
     const isPause = lastSegmentEndTime && (now - lastSegmentEndTime > pauseThreshold);
 
@@ -3212,6 +3286,9 @@ function handleTextSelection(e, segmentId) {
                 // Let's add a way to capture the current length in the onresult.
             }
 
+            // Add to tracking set BEFORE adding as segment to prevent duplicate when it becomes final
+            manuallyCommittedText.add(fullInterimText.trim());
+
             // Add as permanent segment
             addTranscriptSegment(fullInterimText);
 
@@ -3248,13 +3325,11 @@ function handleTextSelection(e, segmentId) {
                 inlineNoteInput.focus();
             }
 
-            // 5. Restart Recognition (new session)
-            if (isRecording) {
-                // Short delay to ensure DOM settles and we don't catch the abort
-                setTimeout(() => startTranscription(), 200);
-            }
         }
-        return; // Stop normal processing
+
+        // No need to restart recognition - let it continue running
+        // The lastProcessedIndex will prevent the same text from being added again when it becomes final
+        return; // Stop normal processing for interim segments
     }
 
     // Normal Logic for existing segments
@@ -3560,50 +3635,137 @@ function deleteInlineNote(segmentId, startOffset) {
     }
 
     // 2. Update HTML (If present)
-    if (segment.html) {
-        const parser = new DOMParser();
-        const doc = parser.parseFromString(segment.html, 'text/html');
+    try {
+        if (segment.html) {
+            const parser = new DOMParser();
+            const doc = parser.parseFromString(segment.html, 'text/html');
 
-        // Correct selector syntax: remove spaces around attributes
-        // And handle potentially slightly different attribute values (string vs number)
-        let mark = doc.querySelector(`.word-highlight[data-highlight-start="${offsetVal}"]`);
+            // Correct selector syntax: remove spaces around attributes
+            // And handle potentially slightly different attribute values (string vs number)
+            let mark = doc.querySelector(`.word-highlight[data-highlight-start="${offsetVal}"]`);
 
-        // Fallback: Try string version if number didn't match
-        if (!mark) {
-            mark = doc.querySelector(`.word-highlight[data-highlight-start="${startOffset}"]`);
+            // Fallback: Try string version if number didn't match
+            if (!mark) {
+                mark = doc.querySelector(`.word-highlight[data-highlight-start="${startOffset}"]`);
+            }
+
+            if (mark) {
+                const textContent = doc.createTextNode(mark.textContent);
+                mark.parentNode.replaceChild(textContent, mark);
+                segment.html = doc.body.innerHTML;
+                segment.text = doc.body.textContent; // Sync text text
+                console.log('Removed from HTML');
+            } else {
+                console.log('Mark not found in HTML, will regenerate from model');
+                segment.html = ''; // Clear HTML to force regeneration
+            }
         }
+    } catch (error) {
+        console.error('Error updating segment HTML:', error);
+        // Clear HTML to force regeneration from model
+        segment.html = '';
+    }
 
-        if (mark) {
-            const textContent = doc.createTextNode(mark.textContent);
-            mark.parentNode.replaceChild(textContent, mark);
-            segment.html = doc.body.innerHTML;
-            segment.text = doc.body.textContent; // Sync text text
-            console.log('Removed from HTML');
+    // 3. Re-render the segment in the DOM
+    // Handle both recording view (transcript-segment) and review view (review-segment)
+    console.log('🔍 deleteInlineNote: Looking for segment:', segmentId);
+    let el = document.getElementById(segmentId);
+
+    if (el) {
+        // Check if this is in the review view (has a .review-segment parent or contenteditable)
+        const reviewSegment = el.closest('.review-segment');
+        const hasContentEditable = el.querySelector('[contenteditable]');
+
+        if (reviewSegment || hasContentEditable) {
+            console.log('✅ Found in EDIT/REVIEW view - using review rendering');
+            // This is in the review/edit view - update the contenteditable area
+            const textSpan = el.querySelector('[contenteditable]') || (el.hasAttribute('contenteditable') ? el : null);
+            if (textSpan) {
+                console.log('Updating contenteditable with segment text');
+                textSpan.innerHTML = '';
+
+                if (!segment.highlights || segment.highlights.length === 0) {
+                    textSpan.textContent = segment.text;
+                } else {
+                    // Build HTML with highlights
+                    let html = '';
+                    let lastIndex = 0;
+                    const sortedHighlights = [...segment.highlights].sort((a, b) => a.start - b.start);
+
+                    sortedHighlights.forEach(h => {
+                        if (h.start > lastIndex) {
+                            html += escapeHtml(segment.text.substring(lastIndex, h.start));
+                        }
+                        const chunk = segment.text.substring(h.start, h.end);
+                        html += `<mark class="word-highlight" data-segment-id="${segment.id}" data-highlight-start="${h.start}" data-note="${escapeHtml(h.note || '')}">${escapeHtml(chunk)}</mark>`;
+                        lastIndex = h.end;
+                    });
+
+                    if (lastIndex < segment.text.length) {
+                        html += escapeHtml(segment.text.substring(lastIndex));
+                    }
+
+                    textSpan.innerHTML = html;
+                }
+            }
         } else {
-            // New Fallback: If we have HTML but can't find the mark (maybe Live mode artifact),
-            // and we successfully removed it from the model above,
-            // we should just REGENERATE the HTML from the text + highlights model.
-            // This is safer than leaving a "ghost" highlight in the HTML.
-            console.log('Mark not found in HTML, regenerating from model...');
-            segment.html = ''; // Force regeneration in createReviewSegmentElement or renderReview logic if we were calling it directly
-            // But here we just leave it empty so the next render step rebuilds it? 
-            // Ideally we manually rebuild it here if we want to be safe, but clearing it 
-            // forces the render logic to fall back to the text+highlights model.
-            // HOWEVER, we need to be careful not to lose other rich text changes. 
-            // If this was a "Live" transcript, it might not have other rich text yet.
+            console.log('✅ Found in RECORDING view - using updateSegmentContent');
+            updateSegmentContent(el, segment);
+        }
+    } else {
+        console.log('❌ Not found by ID, trying review view selector');
+        // Try finding it in review view
+        el = document.querySelector(`[data-segment-id="${segmentId}"]`);
+        if (el) {
+            console.log('✅ Found in review view:', el.className);
+            // Review view element - need to update its contenteditable area
+            const textSpan = el.querySelector('[contenteditable]');
+            if (textSpan) {
+                console.log('✅ Found contenteditable, updating...');
+                console.log('   Segment text:', segment.text.substring(0, 50));
+                console.log('   Highlights:', segment.highlights?.length || 0);
+                // Rebuild the HTML from the segment model (text + highlights)
+                textSpan.innerHTML = '';
 
-            // Smart strategy: If it was legacy/Live note, strict HTML might not match.
-            // If we found and removed it from highlights model, we can trust the render loop
-            // to rebuild it correctly IF we clear the potentially stale HTML.
-            // BUT, only clear HTML if we think it's "safe" (no edits).
-            // For now, let's trust that if the selector failed, the HTML might be out of sync 
-            // or the attribute was missing. 
+                if (!segment.highlights || segment.highlights.length === 0) {
+                    textSpan.textContent = segment.text;
+                } else {
+                    // Build HTML with highlights
+                    let html = '';
+                    let lastIndex = 0;
+                    const sortedHighlights = [...segment.highlights].sort((a, b) => a.start - b.start);
+
+                    sortedHighlights.forEach(h => {
+                        if (h.start > lastIndex) {
+                            html += escapeHtml(segment.text.substring(lastIndex, h.start));
+                        }
+                        const chunk = segment.text.substring(h.start, h.end);
+                        html += `<mark class="word-highlight" data-segment-id="${segment.id}" data-highlight-start="${h.start}" data-note="${escapeHtml(h.note || '')}">${escapeHtml(chunk)}</mark>`;
+                        lastIndex = h.end;
+                    });
+
+                    if (lastIndex < segment.text.length) {
+                        html += escapeHtml(segment.text.substring(lastIndex));
+                    }
+
+                    textSpan.innerHTML = html;
+                }
+            }
         }
     }
 
-    // 3. Re-render
-    pushToReviewHistory();
-    renderReview(); // This triggers the full re-render which handles the fallback if html is cleared/updated
+    // 4. Save to Firestore if we're in an active interview
+    if (currentInterviewId) {
+        try {
+            window.updateInterviewInFirestore(currentInterviewId, {
+                transcript: transcriptSegments,
+                updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+            }).catch(err => console.error("Failed to save after deleting note:", err));
+        } catch (e) {
+            console.error("Error saving after deleting note:", e);
+        }
+    }
+
     showToast('Note removed');
 }
 
@@ -7250,3 +7412,40 @@ window.reorderCategory = async function (draggedId, targetId, isAbove) {
         console.error("Reorder failed", e);
     }
 };
+
+// ==========================================
+// FIX: Event Listeners for Code Creation
+// ==========================================
+
+document.addEventListener('DOMContentLoaded', () => {
+    // 1. "New Code" button in the Codes Panel (Project Detail View)
+    const createCodeBtn = document.getElementById('createCodeBtn');
+    if (createCodeBtn) {
+        createCodeBtn.addEventListener('click', () => {
+            console.log("Create Code Button Clicked (Project Detail)");
+            if (currentProjectId) {
+                openCodeModal(currentProjectId);
+            } else {
+                console.error('Cannot open code modal: No currentProjectId');
+                showToast('Error: Please select a project first', 'error');
+            }
+        });
+    }
+
+    // 2. "New Code" button in Review View & Interview View Sidebars
+    // Note: ID 'newCodeFromReview' is used twice in HTML (lines 378 & 656).
+    // querySelectorAll works even with duplicate IDs.
+    const newCodeButtons = document.querySelectorAll('#newCodeFromReview');
+    newCodeButtons.forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            console.log("Create Code Button Clicked (Review/Interview Sidebar)");
+            if (currentProjectId) {
+                openCodeModal(currentProjectId);
+            } else {
+                console.error('Cannot open code modal: No currentProjectId');
+                showToast('Error: Please open a project first', 'error');
+            }
+        });
+    });
+});
+
